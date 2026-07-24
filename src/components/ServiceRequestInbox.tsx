@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch, useAuth } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { SERVICE_STATUS_LABEL, SERVICE_TYPE_LABEL, label } from "@/lib/labels";
 
-interface ServiceReq {
+export interface ServiceReq {
   id: string;
   type: "WAITER" | "WATER" | "CUTLERY" | "BILL";
   status: "OPEN" | "ACKNOWLEDGED" | "DONE";
@@ -15,26 +16,31 @@ interface ServiceReq {
   createdAt: string;
 }
 
-const TYPE_LABEL: Record<ServiceReq["type"], string> = {
-  WAITER: "Call waiter",
-  WATER: "Water",
-  CUTLERY: "Cutlery",
-  BILL: "Bill",
-};
-
 function ageLabel(iso: string) {
   const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
   if (mins < 1) return "just now";
-  if (mins === 1) return "1 min";
-  return `${mins} min`;
+  if (mins === 1) return "1 min ago";
+  return `${mins} min ago`;
 }
 
-export function ServiceRequestInbox() {
+export function ServiceRequestInbox({
+  onNewRequest,
+  onSelectTable,
+  className = "",
+  maxHeightClass = "max-h-[320px]",
+}: {
+  onNewRequest?: (req: ServiceReq) => void;
+  onSelectTable?: (tableId: string, tableNumber: number | null) => void;
+  className?: string;
+  maxHeightClass?: string;
+}) {
   const { activeBranchId, hasPermission } = useAuth();
   const canManage = hasPermission("sessions.manage");
   const [requests, setRequests] = useState<ServiceReq[]>([]);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState("");
+  const seenRef = useRef<Set<string>>(new Set());
+  const primedRef = useRef(false);
 
   const load = useCallback(async () => {
     if (!activeBranchId) return;
@@ -42,12 +48,22 @@ export function ServiceRequestInbox() {
       const data = await apiFetch("/api/service-requests?status=active", {
         branchId: activeBranchId,
       });
-      setRequests(data.requests);
+      const next = (data.requests ?? []) as ServiceReq[];
+      if (primedRef.current && onNewRequest) {
+        for (const r of next) {
+          if (r.status === "OPEN" && !seenRef.current.has(r.id)) {
+            onNewRequest(r);
+          }
+        }
+      }
+      for (const r of next) seenRef.current.add(r.id);
+      primedRef.current = true;
+      setRequests(next);
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load requests");
     }
-  }, [activeBranchId]);
+  }, [activeBranchId, onNewRequest]);
 
   useEffect(() => {
     void load();
@@ -73,10 +89,12 @@ export function ServiceRequestInbox() {
   }
 
   return (
-    <div className="rounded-[6px] border border-[var(--border)] bg-white">
+    <div
+      className={`rounded-[6px] border border-[var(--border)] bg-white ${className}`}
+    >
       <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-2">
         <p className="text-xs font-semibold tracking-wide text-[var(--muted)] uppercase">
-          Service requests
+          Guest calls
         </p>
         {requests.length > 0 ? (
           <Badge tone="accent">{requests.length} open</Badge>
@@ -91,23 +109,36 @@ export function ServiceRequestInbox() {
 
       {requests.length === 0 ? (
         <p className="px-3 py-6 text-sm text-[var(--muted)]">
-          No guest calls right now. Water, waiter, cutlery, and bill requests appear here.
+          No guest calls. Water, waiter, cutlery, and bill requests appear here.
         </p>
       ) : (
-        <ul className="max-h-[320px] divide-y divide-[var(--border)] overflow-auto">
+        <ul
+          className={`${maxHeightClass} divide-y divide-[var(--border)] overflow-auto`}
+        >
           {requests.map((r) => (
-            <li key={r.id} className="flex items-center gap-2 px-3 py-2.5">
-              <div className="min-w-0 flex-1">
+            <li
+              key={r.id}
+              className={`flex items-center gap-2 px-3 py-2.5 ${
+                r.status === "OPEN" ? "bg-[var(--accent)]/5" : ""
+              }`}
+            >
+              <button
+                type="button"
+                className="min-w-0 flex-1 text-left"
+                onClick={() => onSelectTable?.(r.tableId, r.tableNumber)}
+              >
                 <p className="text-sm font-medium">
                   <span className="num">T{r.tableNumber ?? "?"}</span>
                   <span className="mx-1.5 text-[var(--muted)]">·</span>
-                  {TYPE_LABEL[r.type]}
+                  {label(SERVICE_TYPE_LABEL, r.type)}
                 </p>
                 <p className="text-xs text-[var(--muted)]">
                   {ageLabel(r.createdAt)}
-                  {r.status === "ACKNOWLEDGED" ? " · on the way" : ""}
+                  {r.status === "ACKNOWLEDGED"
+                    ? ` · ${label(SERVICE_STATUS_LABEL, r.status)}`
+                    : ""}
                 </p>
-              </div>
+              </button>
               {canManage ? (
                 <div className="flex shrink-0 gap-1">
                   {r.status === "OPEN" ? (
@@ -117,7 +148,7 @@ export function ServiceRequestInbox() {
                       disabled={busyId === r.id}
                       onClick={() => void updateStatus(r.id, "ACKNOWLEDGED")}
                     >
-                      Ack
+                      On my way
                     </Button>
                   ) : null}
                   <Button
@@ -130,7 +161,7 @@ export function ServiceRequestInbox() {
                 </div>
               ) : (
                 <Badge tone={r.status === "OPEN" ? "accent" : "warn"}>
-                  {r.status}
+                  {label(SERVICE_STATUS_LABEL, r.status)}
                 </Badge>
               )}
             </li>

@@ -47,8 +47,16 @@ export const PATCH = withAuth(async ({ req, tenant }) => {
       if (body.status === "PREPARING" && !order.placedAt) {
         order.placedAt = new Date();
       }
+      if (body.status === "PLACED") {
+        order.readyAt = null;
+        order.servedAt = null;
+        items.forEach((i: IOrderItem) => {
+          i.status = "QUEUED";
+        });
+      }
       if (body.status === "READY") {
         order.readyAt = new Date();
+        order.servedAt = null;
         items.forEach((i: IOrderItem) => {
           i.status = "READY";
         });
@@ -70,8 +78,10 @@ export const PATCH = withAuth(async ({ req, tenant }) => {
         }
       }
       if (body.status === "PREPARING") {
+        order.readyAt = null;
+        order.servedAt = null;
         items.forEach((i: IOrderItem) => {
-          if (i.status === "QUEUED") i.status = "COOKING";
+          if (i.status === "READY" || i.status === "QUEUED") i.status = "COOKING";
         });
       }
     }

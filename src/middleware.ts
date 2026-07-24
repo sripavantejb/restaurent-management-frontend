@@ -68,7 +68,13 @@ export async function middleware(req: NextRequest) {
           const role = String(payload.role || "OWNER");
           const url = req.nextUrl.clone();
           url.pathname =
-            role === "CASHIER" ? "/pos" : role === "CHEF" ? "/kds" : "/dashboard";
+            role === "CASHIER"
+              ? "/pos"
+              : role === "CHEF"
+                ? "/kds"
+                : role === "WAITER"
+                  ? "/waiter"
+                  : "/dashboard";
           return NextResponse.redirect(url);
         } catch {
           /* fall through */
@@ -136,6 +142,23 @@ export async function middleware(req: NextRequest) {
     if (role === "CHEF") {
       const url = req.nextUrl.clone();
       url.pathname = "/kds";
+      return NextResponse.redirect(url);
+    }
+    if (role === "WAITER") {
+      const url = req.nextUrl.clone();
+      url.pathname = "/waiter";
+      return NextResponse.redirect(url);
+    }
+  }
+
+  // Waiters only use the dedicated floor app — no staff sidebar console
+  if (role === "WAITER") {
+    const allowedPage =
+      pathname === "/waiter" || pathname.startsWith("/waiter/");
+    const allowedApi = pathname.startsWith("/api/");
+    if (!allowedPage && !allowedApi) {
+      const url = req.nextUrl.clone();
+      url.pathname = "/waiter";
       return NextResponse.redirect(url);
     }
   }

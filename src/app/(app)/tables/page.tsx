@@ -12,6 +12,13 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { ServiceRequestInbox } from "@/components/ServiceRequestInbox";
+import {
+  ORDER_STATUS_LABEL,
+  TABLE_SHAPE_LABEL,
+  TABLE_STATUS_LABEL,
+  label,
+  tableDisplayStatus,
+} from "@/lib/labels";
 import { formatMoney } from "@/lib/money";
 
 interface TableRow {
@@ -62,6 +69,7 @@ export default function TablesPage() {
   const canEdit = hasPermission("tables.update");
   const canManageSessions = hasPermission("sessions.manage");
   const canManageQr = hasPermission("qr.manage");
+  const canPay = hasPermission("payments.create");
 
   const [tables, setTables] = useState<TableRow[]>([]);
   const [selected, setSelected] = useState<TableRow | null>(null);
@@ -362,6 +370,31 @@ export default function TablesPage() {
     }
   }
 
+  async function collectSessionBill(sessionId: string, due: number, tableNumber: number) {
+    if (
+      !confirm(
+        `Collect ${formatMoney(due)} for Table ${tableNumber}? Marks bill paid and frees the table — same QR stays valid.`
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    try {
+      await apiFetch("/api/payments", {
+        method: "POST",
+        branchId: activeBranchId,
+        body: JSON.stringify({ sessionId, method: "UPI" }),
+      });
+      showToast(`Bill paid · Table ${tableNumber} ready for next guests`);
+      setSelected(null);
+      await load(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Collect failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function autoGrid() {
     const sorted = [...tables].sort((a, b) => a.number - b.number);
     const next = sorted.map((t, i) => {
@@ -499,7 +532,7 @@ export default function TablesPage() {
         {Object.entries(STATUS_COLOR).map(([k, c]) => (
           <span key={k} className="inline-flex items-center gap-1.5">
             <span className="h-2.5 w-2.5 rounded-full" style={{ background: c }} />
-            {k}
+            {label(TABLE_STATUS_LABEL, k)}
           </span>
         ))}
       </div>
@@ -585,7 +618,7 @@ export default function TablesPage() {
                   <span className="num text-lg">T{t.number}</span>
                   <span className="text-[10px] text-[var(--muted)]">
                     {t.currentSession?.status === "BILL_REQUESTED"
-                      ? "BILL"
+                      ? "Bill due"
                       : `${t.capacity}p`}
                     {t.qrCode ? " · QR" : ""}
                   </span>
@@ -618,7 +651,8 @@ export default function TablesPage() {
                   >
                     <span className="num font-medium">T{t.number}</span>
                     <span className="ml-2 text-xs text-[var(--muted)]">
-                      {t.capacity}p · {t.currentSession?.status ?? t.status}
+                      {t.capacity}p ·{" "}
+                      {tableDisplayStatus(t.status, t.currentSession?.status)}
                       {t.qrCode ? " · QR" : " · no QR"}
                     </span>
                   </button>
@@ -686,7 +720,7 @@ export default function TablesPage() {
             >
               {SHAPES.map((s) => (
                 <option key={s} value={s}>
-                  {s}
+                  {label(TABLE_SHAPE_LABEL, s)}
                 </option>
               ))}
             </select>
@@ -749,7 +783,7 @@ export default function TablesPage() {
                   >
                     {SHAPES.map((s) => (
                       <option key={s} value={s}>
-                        {s}
+                        {label(TABLE_SHAPE_LABEL, s)}
                       </option>
                     ))}
                   </select>
@@ -765,7 +799,7 @@ export default function TablesPage() {
                   >
                     {Object.keys(STATUS_COLOR).map((s) => (
                       <option key={s} value={s}>
-                        {s}
+                        {label(TABLE_STATUS_LABEL, s)}
                       </option>
                     ))}
                   </select>
@@ -776,7 +810,7 @@ export default function TablesPage() {
                 <p>
                   Status:{" "}
                   <strong style={{ color: STATUS_COLOR[selected.status] }}>
-                    {selected.status}
+                    {label(TABLE_STATUS_LABEL, selected.status)}
                   </strong>
                 </p>
                 <p>Capacity: {selected.capacity}</p>
@@ -792,8 +826,11 @@ export default function TablesPage() {
                   {selected.currentSession.sessionNumber}
                 </p>
                 <p className="text-[var(--muted)]">
-                  {selected.currentSession.status} ·{" "}
-                  {selected.currentSession.guestCount} guests ·{" "}
+                  {tableDisplayStatus(
+                    selected.status,
+                    selected.currentSession.status
+                  )}{" "}
+                  · {selected.currentSession.guestCount} guests ·{" "}
                   {selected.currentSession.rounds} rounds
                 </p>
                 <p className="num mt-1 text-lg">
@@ -804,10 +841,26 @@ export default function TablesPage() {
                     </span>
                   ) : null}
                 </p>
-                {canManageSessions ? (
+                {canManageSessions || canPay ? (
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {selected.currentSession.status === "BILL_REQUESTED" ||
-                    selected.currentSession.status === "BILLED" ? (
+                    {canPay && selected.currentSession.dueAmount > 0 ? (
+                      <Button
+                        size="sm"
+                        disabled={busy}
+                        onClick={() =>
+                          void collectSessionBill(
+                            selected.currentSession!.id,
+                            selected.currentSession!.dueAmount,
+                            selected.number
+                          )
+                        }
+                      >
+                        Collect bill (paid)
+                      </Button>
+                    ) : null}
+                    {canManageSessions &&
+                    (selected.currentSession.status === "BILL_REQUESTED" ||
+                      selected.currentSession.status === "BILLED") ? (
                       <Button
                         size="sm"
                         disabled={busy}
@@ -818,16 +871,18 @@ export default function TablesPage() {
                         Reopen for ordering
                       </Button>
                     ) : null}
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      disabled={busy}
-                      onClick={() =>
-                        void sessionAction(selected.currentSession!.id, "CLOSE")
-                      }
-                    >
-                      Close & free table
-                    </Button>
+                    {canManageSessions ? (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={busy}
+                        onClick={() =>
+                          void sessionAction(selected.currentSession!.id, "CLOSE")
+                        }
+                      >
+                        Close & free table
+                      </Button>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
@@ -839,7 +894,7 @@ export default function TablesPage() {
                   {selected.currentOrder.orderNumber}
                 </p>
                 <p className="text-[var(--muted)]">
-                  {selected.currentOrder.status}
+                  {label(ORDER_STATUS_LABEL, selected.currentOrder.status)}
                 </p>
                 <p className="num mt-1 text-lg">
                   {formatMoney(selected.currentOrder.total)}

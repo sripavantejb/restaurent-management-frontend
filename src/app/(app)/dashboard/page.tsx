@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch, useAuth } from "@/components/AuthProvider";
 import { Card } from "@/components/ui/Card";
+import { TABLE_STATUS_LABEL, label } from "@/lib/labels";
 import { formatMoney } from "@/lib/money";
 
 interface Summary {
@@ -202,7 +203,7 @@ export default function DashboardPage() {
             {data.occupancy.tables.map((t) => (
               <span
                 key={t.id}
-                title={`T${t.number} ${t.status}`}
+                title={`T${t.number} ${label(TABLE_STATUS_LABEL, t.status)}`}
                 className="absolute h-5 w-5 rounded-[4px] border border-white"
                 style={{
                   left: `${(t.x / 600) * 90 + 5}%`,

@@ -22,6 +22,7 @@ const CreateOrderSchema = z.object({
   tableId: z.string().nullable().optional(),
   items: z.array(ItemSchema).min(1),
   discountAmount: z.number().int().nonnegative().optional().default(0),
+  source: z.enum(["POS", "WAITER"]).optional(),
 });
 
 async function nextOrderNumber(
@@ -178,7 +179,7 @@ export const POST = withAuth(async ({ req, tenant }) => {
           sessionNumber,
           tableIds: [table._id],
           status: "OPEN",
-          source: "POS",
+          source: body.source === "WAITER" ? "WAITER" : "POS",
           guestCount: 1,
           orderIds: [],
           rounds: 0,

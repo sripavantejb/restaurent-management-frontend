@@ -59,6 +59,7 @@ export default function GuestTableClient({
   const [tipPercent, setTipPercent] = useState(0);
   const [toast, setToast] = useState("");
   const [wrongTable, setWrongTable] = useState(false);
+  const [paidAmount, setPaidAmount] = useState(0);
   const placingRef = useRef(false);
 
   const currency = boot?.restaurant.currency ?? "INR";
@@ -398,11 +399,14 @@ export default function GuestTableClient({
         showToast(data.error || "Payment failed");
         return;
       }
-      showToast(`Paid ${formatMoney(data.amount, currency)} — thank you!`);
+      setPaidAmount(data.amount ?? 0);
       setCart([]);
-      setPhase("landing");
       setCheckout(null);
-      void loadBootstrap();
+      setPhase("paid");
+      showToast(
+        data.message ||
+          `Paid ${formatMoney(data.amount, currency)} — table ready for next guests`
+      );
     } catch {
       showToast("Payment error");
     } finally {
@@ -445,6 +449,37 @@ export default function GuestTableClient({
         <p className={styles.muted} style={{ textAlign: "center", marginTop: 80 }}>
           Loading your table…
         </p>
+      </div>
+    );
+  }
+
+  if (phase === "paid") {
+    return (
+      <div className={styles.shell}>
+        <div className={styles.centerState}>
+          <p className={styles.eyebrow}>Bill paid</p>
+          <h1 className={styles.display} style={{ fontSize: 28, margin: "12px 0 8px" }}>
+            Thank you
+          </h1>
+          <p className="num" style={{ fontSize: 32, fontWeight: 700, margin: "0 0 12px" }}>
+            {formatMoney(paidAmount, currency)}
+          </p>
+          <p className={styles.muted} style={{ lineHeight: 1.5 }}>
+            Table {boot?.table.number ?? ""} is clear for the next guests. The same
+            QR on this table starts a fresh session — no reprint needed.
+          </p>
+          <button
+            type="button"
+            className={styles.btnPrimary}
+            style={{ marginTop: 20 }}
+            onClick={() => {
+              setPaidAmount(0);
+              void loadBootstrap();
+            }}
+          >
+            Start new session
+          </button>
+        </div>
       </div>
     );
   }

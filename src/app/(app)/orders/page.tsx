@@ -7,6 +7,13 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { ApprovalQueue } from "@/components/ApprovalQueue";
+import {
+  APPROVAL_STATUS_LABEL,
+  ORDER_STATUS_LABEL,
+  ORDER_TYPE_LABEL,
+  PAY_METHOD_LABEL,
+  label,
+} from "@/lib/labels";
 import { formatMoney } from "@/lib/money";
 
 interface Order {
@@ -131,7 +138,9 @@ export default function OrdersPage() {
               onChange={(e) => setStatus(e.target.value)}
             >
               <option value="">All statuses</option>
-              <option value="pending_approval">Pending approval</option>
+              <option value="pending_approval">
+                {label(APPROVAL_STATUS_LABEL, "PENDING")}
+              </option>
               {[
                 "DRAFT",
                 "PLACED",
@@ -142,7 +151,7 @@ export default function OrdersPage() {
                 "CANCELLED",
               ].map((s) => (
                 <option key={s} value={s}>
-                  {s}
+                  {label(ORDER_STATUS_LABEL, s)}
                 </option>
               ))}
             </select>
@@ -152,8 +161,8 @@ export default function OrdersPage() {
               onChange={(e) => setType(e.target.value)}
             >
               <option value="">All types</option>
-              <option value="DINE_IN">Dine-in</option>
-              <option value="TAKEAWAY">Takeaway</option>
+              <option value="DINE_IN">{label(ORDER_TYPE_LABEL, "DINE_IN")}</option>
+              <option value="TAKEAWAY">{label(ORDER_TYPE_LABEL, "TAKEAWAY")}</option>
             </select>
             <Input
               type="date"
@@ -216,7 +225,7 @@ export default function OrdersPage() {
                         ) : null}
                       </td>
                       <td className="px-3 py-2.5">
-                        {o.type}
+                        {label(ORDER_TYPE_LABEL, o.type)}
                         {o.placedBy === "GUEST" ? (
                           <span className="ml-1 text-xs text-[var(--muted)]">
                             QR
@@ -236,8 +245,8 @@ export default function OrdersPage() {
                           }
                         >
                           {o.approvalStatus === "PENDING"
-                            ? "PENDING APPROVAL"
-                            : o.status}
+                            ? label(APPROVAL_STATUS_LABEL, "PENDING")
+                            : label(ORDER_STATUS_LABEL, o.status)}
                         </Badge>
                       </td>
                       <td className="px-3 py-2.5 text-[var(--muted)]">
@@ -267,10 +276,14 @@ export default function OrdersPage() {
         {selected ? (
           <div className="space-y-3">
             <div className="flex flex-wrap gap-2">
-              <Badge>{selected.type}</Badge>
-              <Badge tone="accent">{selected.status}</Badge>
+              <Badge>{label(ORDER_TYPE_LABEL, selected.type)}</Badge>
+              <Badge tone="accent">
+                {label(ORDER_STATUS_LABEL, selected.status)}
+              </Badge>
               {selected.approvalStatus && selected.approvalStatus !== "NONE" ? (
-                <Badge tone="warn">{selected.approvalStatus}</Badge>
+                <Badge tone="warn">
+                  {label(APPROVAL_STATUS_LABEL, selected.approvalStatus)}
+                </Badge>
               ) : null}
             </div>
             <ul className="space-y-2 border-y border-[var(--border)] py-3">
@@ -332,7 +345,8 @@ export default function OrdersPage() {
               </div>
             ) : payment ? (
               <p className="rounded-[6px] bg-[var(--success)]/10 px-3 py-2 text-sm text-[var(--success)]">
-                Paid via {payment.method} · {formatMoney(payment.amount)} ·{" "}
+                Paid via {label(PAY_METHOD_LABEL, payment.method)} ·{" "}
+                {formatMoney(payment.amount)} ·{" "}
                 {new Date(payment.paidAt).toLocaleString("en-IN")}
               </p>
             ) : selected.status !== "CANCELLED" &&
@@ -340,7 +354,7 @@ export default function OrdersPage() {
               selected.status !== "DRAFT" ? (
               <div className="space-y-2">
                 <p className="text-sm text-[var(--muted)]">
-                  Unpaid. Collect with UPI / Card / Cash below (cashier).
+                  Unpaid. Collect with UPI, card, or cash below (cashier).
                 </p>
                 <div className="flex gap-2">
                   {(["UPI", "CARD", "CASH"] as const).map((m) => (
@@ -371,7 +385,7 @@ export default function OrdersPage() {
                         }
                       }}
                     >
-                      Pay {m}
+                      Pay {label(PAY_METHOD_LABEL, m)}
                     </Button>
                   ))}
                 </div>

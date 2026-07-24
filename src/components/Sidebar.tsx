@@ -13,9 +13,11 @@ import {
   Settings,
   LogOut,
   X,
+  Users,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import type { Permission } from "@/lib/rbac";
+import { ROLE_LABEL, label } from "@/lib/labels";
 
 const NAV: {
   href: string;
@@ -29,6 +31,7 @@ const NAV: {
   { href: "/orders", label: "Orders", permission: "orders.view", icon: ClipboardList },
   { href: "/menu", label: "Menu", permission: "menu.view", icon: UtensilsCrossed },
   { href: "/tables", label: "Tables", permission: "tables.view", icon: Grid3X3 },
+  { href: "/staff", label: "Waiters", permission: "users.manage", icon: Users },
   { href: "/qr", label: "QR", permission: "qr.manage", icon: QrCode },
   { href: "/settings", label: "Settings", permission: "qr.manage", icon: Settings },
 ];
@@ -123,7 +126,9 @@ export function Sidebar({
 
         <div className="border-t border-[var(--border)] p-3">
           <p className="truncate text-sm font-medium">{user?.name}</p>
-          <p className="text-xs text-[var(--muted)]">{user?.role}</p>
+          <p className="text-xs text-[var(--muted)]">
+            {label(ROLE_LABEL, user?.role)}
+          </p>
           <button
             type="button"
             onClick={() => void logout()}

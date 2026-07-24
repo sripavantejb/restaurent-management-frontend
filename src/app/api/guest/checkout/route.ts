@@ -2,11 +2,11 @@ import { z } from "zod";
 import { cookies } from "next/headers";
 import { TableSession } from "@/models/TableSession";
 import { Order } from "@/models/Order";
-import { Table } from "@/models/Table";
 import { Payment } from "@/models/Payment";
 import { ServiceRequest } from "@/models/ServiceRequest";
 import { withGuest, guestError, guestJson } from "@/lib/guest-api";
 import { recomputeSessionTotals } from "@/lib/session";
+import { settlePaidSession } from "@/lib/settle";
 
 const GUEST_COOKIE = "ros_guest";
 
@@ -112,7 +112,10 @@ export const POST = withGuest(async (req) => {
       if (body.tipPercent != null) {
         await recomputeSessionTotals(session._id);
         const base =
-          session.subtotal - session.discountAmount + session.taxAmount + session.serviceCharge;
+          session.subtotal -
+          session.discountAmount +
+          session.taxAmount +
+          session.serviceCharge;
         session.tipAmount = Math.round((base * body.tipPercent) / 100);
         await session.save();
       } else if (body.tipAmount != null) {
@@ -140,36 +143,11 @@ export const POST = withGuest(async (req) => {
         paidAt: new Date(),
       });
 
-      // Mark member orders completed
-      await Order.updateMany(
-        {
-          restaurantId: session.restaurantId,
-          branchId: session.branchId,
-          sessionId: session._id,
-          status: { $nin: ["CANCELLED", "COMPLETED"] },
-        },
-        { $set: { status: "COMPLETED", completedAt: new Date() } }
-      );
-
-      await recomputeSessionTotals(session._id);
-      const closed = await TableSession.findById(session._id);
+      const closed = await settlePaidSession(session._id);
       if (!closed) return guestError("Session missing", 500);
       if (closed.dueAmount > 0) {
         return guestError("Payment incomplete", 400);
       }
-
-      closed.status = "CLOSED";
-      closed.closedAt = new Date();
-      await closed.save();
-
-      await Table.updateMany(
-        {
-          _id: { $in: closed.tableIds },
-          restaurantId: closed.restaurantId,
-          branchId: closed.branchId,
-        },
-        { $set: { status: "FREE", currentSessionId: null } }
-      );
 
       const jar = await cookies();
       jar.set(GUEST_COOKIE, "", { path: "/", maxAge: 0 });
@@ -178,7 +156,10 @@ export const POST = withGuest(async (req) => {
         paid: true,
         amount,
         tipAmount: closed.tipAmount,
-        sessionStatus: "CLOSED",
+        sessionStatus: "BILLED",
+        tableReset: true,
+        message:
+          "Bill paid. This table is free — scan the same QR to start a new session.",
       });
     }
 

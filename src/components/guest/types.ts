@@ -1,4 +1,4 @@
-export type Phase = "loading" | "invalid" | "landing" | "menu" | "track";
+export type Phase = "loading" | "invalid" | "landing" | "menu" | "track" | "paid";
 
 export type Diet = "all" | "veg" | "nonveg" | "egg";
 

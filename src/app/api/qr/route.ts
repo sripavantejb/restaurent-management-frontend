@@ -250,11 +250,12 @@ export const PATCH = withAuth(async ({ req, tenant, user }) => {
 const DeleteSchema = z
   .object({
     id: z.string().min(1).optional(),
+    ids: z.array(z.string().min(1)).min(1).optional(),
     tableId: z.string().min(1).optional(),
     hard: z.boolean().optional().default(false),
   })
-  .refine((b) => !!b.id || !!b.tableId, {
-    message: "Provide id or tableId",
+  .refine((b) => !!b.id || !!b.tableId || (b.ids && b.ids.length > 0), {
+    message: "Provide id, ids, or tableId",
   });
 
 export const DELETE = withAuth(async ({ req, tenant }) => {
@@ -265,7 +266,12 @@ export const DELETE = withAuth(async ({ req, tenant }) => {
       tableId: url.searchParams.get("tableId") || undefined,
       hard: url.searchParams.get("hard") === "1",
     };
-    let body: { id?: string; tableId?: string; hard?: boolean } = fromQuery;
+    let body: {
+      id?: string;
+      ids?: string[];
+      tableId?: string;
+      hard?: boolean;
+    } = fromQuery;
     try {
       const parsed = await req.json();
       body = { ...fromQuery, ...parsed };
@@ -278,10 +284,16 @@ export const DELETE = withAuth(async ({ req, tenant }) => {
       restaurantId: tenant.restaurantId,
       branchId: tenant.branchId,
     };
-    if (input.id) filter._id = input.id;
+    if (input.ids?.length) {
+      filter._id = { $in: input.ids };
+    } else if (input.id) {
+      filter._id = input.id;
+    }
     if (input.tableId) {
       filter.tableId = input.tableId;
-      filter.isActive = true;
+      if (!input.id && !input.ids?.length) {
+        filter.isActive = true;
+      }
     }
 
     const codes = await QRCode.find(filter);

@@ -1,18 +1,91 @@
 import { z } from "zod";
 import { Order } from "@/models/Order";
 import { Payment } from "@/models/Payment";
-import { Table } from "@/models/Table";
+import { TableSession } from "@/models/TableSession";
 import { withAuth, json, error } from "@/lib/api";
+import { recomputeSessionTotals } from "@/lib/session";
+import { settlePaidSession } from "@/lib/settle";
 
 const PaymentSchema = z.object({
-  orderId: z.string().min(1),
+  orderId: z.string().min(1).optional(),
+  sessionId: z.string().min(1).optional(),
   method: z.enum(["CASH", "CARD", "UPI"]),
   tenderedAmount: z.number().int().nonnegative().optional().default(0),
+}).refine((b) => !!b.orderId || !!b.sessionId, {
+  message: "Provide orderId or sessionId",
 });
 
 export const POST = withAuth(async ({ req, tenant }) => {
   try {
     const body = PaymentSchema.parse(await req.json());
+
+    // Session-level collect (QR bill at counter / waiter)
+    if (body.sessionId) {
+      const session = await TableSession.findOne({
+        _id: body.sessionId,
+        restaurantId: tenant.restaurantId,
+        branchId: tenant.branchId,
+        status: { $in: ["OPEN", "BILL_REQUESTED"] },
+      });
+      if (!session) return error("Open session not found", 404);
+
+      await recomputeSessionTotals(session._id);
+      const fresh = await TableSession.findById(session._id);
+      if (!fresh) return error("Session missing", 500);
+      if (fresh.dueAmount <= 0) {
+        return error("Nothing due on this table", 400);
+      }
+
+      let tendered = body.tenderedAmount;
+      let change = 0;
+      if (body.method === "CASH") {
+        if (tendered < fresh.dueAmount) {
+          return error(
+            "Tendered amount is less than due",
+            400,
+            "Enter an amount equal to or greater than the bill."
+          );
+        }
+        change = tendered - fresh.dueAmount;
+      } else {
+        tendered = fresh.dueAmount;
+      }
+
+      const amount = fresh.dueAmount;
+      const payment = await Payment.create({
+        restaurantId: tenant.restaurantId,
+        branchId: tenant.branchId,
+        sessionId: session._id,
+        orderId: null,
+        method: body.method,
+        amount,
+        tenderedAmount: tendered,
+        changeAmount: change,
+        tipAmount: fresh.tipAmount,
+        paidAt: new Date(),
+      });
+
+      const closed = await settlePaidSession(session._id, {
+        closedBy: tenant.userId,
+      });
+      if (!closed || closed.dueAmount > 0) {
+        return error("Payment incomplete", 400);
+      }
+
+      return json(
+        {
+          id: payment._id.toString(),
+          sessionId: session._id.toString(),
+          method: payment.method,
+          amount: payment.amount,
+          changeAmount: payment.changeAmount,
+          sessionStatus: "BILLED",
+          tableReset: true,
+        },
+        201
+      );
+    }
+
     const order = await Order.findOne({
       _id: body.orderId,
       restaurantId: tenant.restaurantId,
@@ -46,6 +119,7 @@ export const POST = withAuth(async ({ req, tenant }) => {
       restaurantId: tenant.restaurantId,
       branchId: tenant.branchId,
       orderId: order._id,
+      sessionId: order.sessionId ?? null,
       method: body.method,
       amount: order.total,
       tenderedAmount: tendered,
@@ -58,14 +132,23 @@ export const POST = withAuth(async ({ req, tenant }) => {
     if (!order.servedAt) order.servedAt = new Date();
     await order.save();
 
-    if (order.tableId) {
+    if (order.sessionId) {
+      await recomputeSessionTotals(order.sessionId);
+      const session = await TableSession.findById(order.sessionId);
+      if (session && ["OPEN", "BILL_REQUESTED"].includes(session.status)) {
+        if (session.dueAmount <= 0) {
+          await settlePaidSession(session._id, { closedBy: tenant.userId });
+        }
+      }
+    } else if (order.tableId) {
+      const { Table } = await import("@/models/Table");
       await Table.updateOne(
         {
           _id: order.tableId,
           restaurantId: tenant.restaurantId,
           branchId: tenant.branchId,
         },
-        { $set: { status: "FREE" } }
+        { $set: { status: "FREE", currentSessionId: null } }
       );
     }
 
@@ -77,6 +160,7 @@ export const POST = withAuth(async ({ req, tenant }) => {
         method: payment.method,
         amount: payment.amount,
         changeAmount: payment.changeAmount,
+        tableReset: true,
       },
       201
     );

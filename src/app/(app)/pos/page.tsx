@@ -7,6 +7,12 @@ import { useCart } from "@/components/pos/cartStore";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import {
+  ORDER_TYPE_LABEL,
+  PAY_METHOD_LABEL,
+  TABLE_STATUS_LABEL,
+  label,
+} from "@/lib/labels";
 import { calcTax, calcTotal, formatMoney } from "@/lib/money";
 
 interface Category {
@@ -272,7 +278,9 @@ export default function PosPage() {
                   : "border border-[var(--border)] text-[var(--muted)]"
               }`}
             >
-              {t === "DINE_IN" ? "Dine-In" : "Takeaway"}
+              {t === "DINE_IN"
+                ? label(ORDER_TYPE_LABEL, "DINE_IN")
+                : label(ORDER_TYPE_LABEL, "TAKEAWAY")}
             </button>
           ))}
           {cart.type === "DINE_IN" ? (
@@ -526,7 +534,9 @@ export default function PosPage() {
               >
                 <span className={`mb-2 h-2.5 w-2.5 rounded-full ${statusColor[t.status]}`} />
                 <span className="font-medium">T{t.number}</span>
-                <span className="text-xs text-[var(--muted)]">{t.status}</span>
+                <span className="text-xs text-[var(--muted)]">
+                  {label(TABLE_STATUS_LABEL, t.status)}
+                </span>
               </button>
             );
           })}
@@ -614,7 +624,7 @@ export default function PosPage() {
                     : "border-[var(--border)]"
                 }`}
               >
-                {m}
+                {label(PAY_METHOD_LABEL, m)}
               </button>
             ))}
           </div>

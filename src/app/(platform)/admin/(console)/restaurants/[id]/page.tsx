@@ -7,6 +7,7 @@ import { platformFetch } from "@/components/PlatformAuthProvider";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { RESTAURANT_STATUS_LABEL, label } from "@/lib/labels";
 
 interface Detail {
   restaurant: {
@@ -107,7 +108,9 @@ export default function RestaurantDetailPage() {
             <h1 className="text-2xl font-semibold tracking-tight text-[var(--ink)]">
               {restaurant.name}
             </h1>
-            <Badge tone={statusTone(restaurant.status)}>{restaurant.status}</Badge>
+            <Badge tone={statusTone(restaurant.status)}>
+              {label(RESTAURANT_STATUS_LABEL, restaurant.status)}
+            </Badge>
           </div>
           <p className="mt-1 text-sm text-[var(--muted)]">
             <span className="num">{restaurant.slug}</span>
@@ -179,6 +182,10 @@ export default function RestaurantDetailPage() {
             <div>
               <dt className="text-xs text-[var(--muted)]">Staff accounts</dt>
               <dd className="num">{staffCount}</dd>
+              <p className="mt-2 text-xs text-[var(--muted)]">
+                Day-to-day waiter accounts and performance live in the restaurant
+                console under <strong>Waiters</strong> (owner/manager login).
+              </p>
             </div>
           </dl>
         </Card>

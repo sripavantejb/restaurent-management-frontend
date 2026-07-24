@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
+import { RESTAURANT_STATUS_LABEL, label } from "@/lib/labels";
 
 interface RestaurantRow {
   id: string;
@@ -87,9 +88,15 @@ export default function RestaurantsListPage() {
           aria-label="Filter by status"
         >
           <option value="">All statuses</option>
-          <option value="ACTIVE">Active</option>
-          <option value="PENDING">Pending</option>
-          <option value="SUSPENDED">Suspended</option>
+          <option value="ACTIVE">
+            {label(RESTAURANT_STATUS_LABEL, "ACTIVE")}
+          </option>
+          <option value="PENDING">
+            {label(RESTAURANT_STATUS_LABEL, "PENDING")}
+          </option>
+          <option value="SUSPENDED">
+            {label(RESTAURANT_STATUS_LABEL, "SUSPENDED")}
+          </option>
         </select>
       </div>
 
@@ -136,7 +143,9 @@ export default function RestaurantsListPage() {
                     <p className="text-xs text-[var(--muted)]">{r.slug}</p>
                   </td>
                   <td className="px-4 py-3">
-                    <Badge tone={statusTone(r.status)}>{r.status}</Badge>
+                    <Badge tone={statusTone(r.status)}>
+                      {label(RESTAURANT_STATUS_LABEL, r.status)}
+                    </Badge>
                   </td>
                   <td className="px-4 py-3 num">{r.branchCount}</td>
                   <td className="px-4 py-3">

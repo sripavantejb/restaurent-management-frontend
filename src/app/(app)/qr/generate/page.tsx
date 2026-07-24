@@ -5,12 +5,14 @@ import Link from "next/link";
 import { apiFetch, useAuth } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { TABLE_STATUS_LABEL, label } from "@/lib/labels";
 
 interface TableRow {
   id: string;
   number: number;
   capacity: number;
   status: string;
+  qrCode: { id: string; shortCode: string } | null;
 }
 
 interface CreatedCode {
@@ -40,9 +42,13 @@ export default function QrGeneratePage() {
     if (!activeBranchId) return;
     try {
       const data = await apiFetch("/api/tables", { branchId: activeBranchId });
-      const list = (data.tables as TableRow[]).slice().sort((a, b) => a.number - b.number);
+      const list = (data.tables as TableRow[])
+        .slice()
+        .sort((a, b) => a.number - b.number);
       setTables(list);
-      setSelected(new Set(list.map((t) => t.id)));
+      // Default: only tables that still need a QR
+      const missing = list.filter((t) => !t.qrCode).map((t) => t.id);
+      setSelected(new Set(missing.length > 0 ? missing : list.map((t) => t.id)));
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load tables");
@@ -54,6 +60,7 @@ export default function QrGeneratePage() {
   }, [load]);
 
   const allSelected = tables.length > 0 && selected.size === tables.length;
+  const missingCount = tables.filter((t) => !t.qrCode).length;
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -70,6 +77,10 @@ export default function QrGeneratePage() {
 
   function selectNone() {
     setSelected(new Set());
+  }
+
+  function selectMissing() {
+    setSelected(new Set(tables.filter((t) => !t.qrCode).map((t) => t.id)));
   }
 
   async function generate() {
@@ -129,11 +140,14 @@ export default function QrGeneratePage() {
 
       <div className="grid flex-1 gap-6 overflow-auto p-6 lg:grid-cols-2">
         <section>
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--muted)]">
               Tables ({selected.size}/{tables.length})
             </h2>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="ghost" size="sm" onClick={selectMissing}>
+                No QR only ({missingCount})
+              </Button>
               <Button type="button" variant="ghost" size="sm" onClick={selectAll}>
                 All
               </Button>
@@ -156,7 +170,8 @@ export default function QrGeneratePage() {
                 />
                 <span className="num font-medium">Table {t.number}</span>
                 <span className="text-xs text-[var(--muted)]">
-                  · {t.capacity} seats · {t.status}
+                  · {t.capacity} seats · {label(TABLE_STATUS_LABEL, t.status)}
+                  {t.qrCode ? " · has QR" : " · no QR"}
                 </span>
               </label>
             ))}
@@ -213,6 +228,7 @@ export default function QrGeneratePage() {
             </label>
             <p className="text-xs text-[var(--muted)]">
               Dark on light only. Contrast must be ≥ 4:1 so older phone cameras can read the code.
+              Selecting a table that already has a QR replaces the old active code.
               {!allSelected && selected.size > 0
                 ? ` Generating for ${selected.size} selected tables.`
                 : null}

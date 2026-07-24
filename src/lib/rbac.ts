@@ -25,6 +25,8 @@ export const PERMISSIONS = [
   "branch.switch",
   "qr.manage",
   "sessions.manage",
+  "users.manage",
+  "waiter.floor",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -51,6 +53,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "payments.create",
     "qr.manage",
     "sessions.manage",
+    "users.manage",
+    "waiter.floor",
   ],
   CASHIER: [
     "pos.bill",
@@ -71,6 +75,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "tables.view",
     "tables.update",
     "sessions.manage",
+    "waiter.floor",
+    "payments.create",
   ],
   CHEF: ["kds.view", "kds.update", "orders.view", "orders.update"],
 };
@@ -93,6 +99,8 @@ export function homePathForRole(role: Role): string {
       return "/pos";
     case "CHEF":
       return "/kds";
+    case "WAITER":
+      return "/waiter";
     default:
       return "/dashboard";
   }

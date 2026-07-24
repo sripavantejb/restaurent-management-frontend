@@ -137,7 +137,7 @@ export default function MenuPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Menu</h1>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            Toggle availability to 86 an item — POS greys it out on the next poll.
+            Mark items sold out — POS greys them out on the next refresh.
           </p>
         </div>
         {hasPermission("menu.edit") ? (
@@ -190,7 +190,7 @@ export default function MenuPage() {
                         : "bg-[var(--surface-2)] text-[var(--muted)]"
                     }`}
                   >
-                    {item.isAvailable ? "On" : "86'd"}
+                    {item.isAvailable ? "Available" : "Sold out"}
                   </button>
                 </td>
                 <td className="px-3 py-2.5 text-right">

@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { apiFetch, useAuth } from "@/components/AuthProvider";
+import { KDS_COLUMN_LABEL, ORDER_TYPE_LABEL, label } from "@/lib/labels";
 
 interface OrderItem {
   id?: string;
@@ -25,6 +27,15 @@ interface Order {
   placedBy?: "STAFF" | "GUEST";
 }
 
+type KdsColumn = "NEW" | "COOKING" | "READY" | "SERVED";
+
+const FLOW: { column: KdsColumn; status: Order["status"] }[] = [
+  { column: "NEW", status: "PLACED" },
+  { column: "COOKING", status: "PREPARING" },
+  { column: "READY", status: "READY" },
+  { column: "SERVED", status: "SERVED" },
+];
+
 function ageMs(placedAt: string | null) {
   if (!placedAt) return 0;
   return Date.now() - new Date(placedAt).getTime();
@@ -44,6 +55,13 @@ function ageClass(ms: number) {
   return "border-[#3a3530]";
 }
 
+function neighborStatus(status: string, dir: -1 | 1): string | null {
+  const idx = FLOW.findIndex((f) => f.status === status);
+  if (idx < 0) return null;
+  const next = FLOW[idx + dir];
+  return next?.status ?? null;
+}
+
 export default function KdsPage() {
   const { activeBranchId } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
@@ -51,6 +69,7 @@ export default function KdsPage() {
   const [syncedAt, setSyncedAt] = useState<Date | null>(null);
   const [tick, setTick] = useState(0);
   const [error, setError] = useState("");
+  const [busyId, setBusyId] = useState<string | null>(null);
   const mapRef = useRef<Map<string, Order>>(new Map());
 
   const load = useCallback(async () => {
@@ -65,7 +84,6 @@ export default function KdsPage() {
         const prev = mapRef.current.get(o.id);
         next.set(o.id, prev ? { ...o, placedAt: o.placedAt || prev.placedAt } : o);
       }
-      // Keep recently SERVED from previous poll if within 15 min
       for (const [id, prev] of mapRef.current) {
         if (
           prev.status === "SERVED" &&
@@ -98,16 +116,21 @@ export default function KdsPage() {
     };
   }, [load]);
 
-  async function advance(order: Order) {
+  async function shift(order: Order, dir: -1 | 1) {
+    const status = neighborStatus(order.status, dir);
+    if (!status || busyId === order.id) return;
+    setBusyId(order.id);
     try {
       await apiFetch(`/api/orders/${order.id}/status`, {
         method: "PATCH",
         branchId: activeBranchId,
-        body: JSON.stringify({}),
+        body: JSON.stringify({ status }),
       });
       void load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not update order");
+    } finally {
+      setBusyId(null);
     }
   }
 
@@ -156,7 +179,11 @@ export default function KdsPage() {
           <span className="num">
             Synced{" "}
             {syncedAt
-              ? syncedAt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+              ? syncedAt.toLocaleTimeString("en-IN", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  second: "2-digit",
+                })
               : "—"}
           </span>
         </div>
@@ -177,9 +204,12 @@ export default function KdsPage() {
             ["SERVED", cols.SERVED],
           ] as const
         ).map(([title, list]) => (
-          <section key={title} className="flex min-h-[280px] flex-col rounded-[6px] bg-[#1a1714] p-2 xl:min-h-0">
+          <section
+            key={title}
+            className="flex min-h-[280px] flex-col rounded-[6px] bg-[#1a1714] p-2 xl:min-h-0"
+          >
             <h2 className="mb-2 px-1 text-xs font-semibold tracking-[0.15em] text-[#9a938a] uppercase">
-              {title} · {list.length}
+              {label(KDS_COLUMN_LABEL, title)} · {list.length}
             </h2>
             <div className="min-h-0 flex-1 space-y-2 overflow-auto">
               {list.length === 0 ? (
@@ -192,7 +222,9 @@ export default function KdsPage() {
                 list.map((order) => {
                   const age = ageMs(order.placedAt);
                   const faded = title === "SERVED";
-                  const canAdvance = title !== "SERVED";
+                  const canBack = Boolean(neighborStatus(order.status, -1));
+                  const canForward = Boolean(neighborStatus(order.status, 1));
+                  const busy = busyId === order.id;
                   return (
                     <article
                       key={order.id}
@@ -200,33 +232,49 @@ export default function KdsPage() {
                         faded ? "opacity-45" : ""
                       }`}
                     >
-                      <button
-                        type="button"
-                        disabled={!canAdvance}
-                        onClick={() => canAdvance && void advance(order)}
-                        className="mb-2 flex w-full items-start justify-between gap-2 rounded-[6px] text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)] disabled:cursor-default"
-                      >
-                        <div>
+                      <div className="mb-2 flex items-start justify-between gap-2">
+                        <div className="min-w-0">
                           <p className="num text-2xl font-semibold tracking-tight">
                             {order.orderNumber}
                           </p>
                           <p className="text-sm text-[#c4bdb3]">
                             {order.type === "TAKEAWAY"
-                              ? "TAKEAWAY"
+                              ? label(ORDER_TYPE_LABEL, "TAKEAWAY")
                               : order.placedBy === "GUEST" && order.roundNumber
                                 ? `Table ${tables[order.tableId ?? ""] ?? "?"} · Round ${order.roundNumber} · QR`
                                 : order.tableId
                                   ? `Table ${tables[order.tableId] ?? "?"}`
-                                  : "Dine-in"}
+                                  : label(ORDER_TYPE_LABEL, "DINE_IN")}
                           </p>
-                          {canAdvance ? (
-                            <p className="mt-1 text-xs text-[#6b6560]">
-                              Tap header to advance
-                            </p>
-                          ) : null}
                         </div>
-                        <p className="num text-xl text-[var(--warn)]">{formatElapsed(age)}</p>
-                      </button>
+                        <p className="num text-xl text-[var(--warn)]">
+                          {formatElapsed(age)}
+                        </p>
+                      </div>
+
+                      <div className="mb-3 flex items-center gap-2">
+                        <button
+                          type="button"
+                          disabled={!canBack || busy}
+                          onClick={() => void shift(order, -1)}
+                          className="inline-flex h-10 flex-1 items-center justify-center gap-1 rounded-[6px] border border-[#3a3530] text-sm font-medium text-[#c4bdb3] transition hover:border-[var(--accent)] hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
+                          aria-label="Move ticket back"
+                        >
+                          <ChevronLeft size={18} />
+                          Back
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!canForward || busy}
+                          onClick={() => void shift(order, 1)}
+                          className="inline-flex h-10 flex-1 items-center justify-center gap-1 rounded-[6px] border border-[var(--accent)] bg-[var(--accent)]/15 text-sm font-medium text-[var(--accent)] transition hover:bg-[var(--accent)] hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
+                          aria-label="Move ticket forward"
+                        >
+                          Next
+                          <ChevronRight size={18} />
+                        </button>
+                      </div>
+
                       <ul className="space-y-1.5">
                         {order.items.map((it, idx) => (
                           <li key={it.id ?? idx}>
@@ -239,7 +287,8 @@ export default function KdsPage() {
                               }`}
                               onClick={() => void markItem(order.id, it.id)}
                             >
-                              <span className="num font-semibold">{it.qty}×</span> {it.name}
+                              <span className="num font-semibold">{it.qty}×</span>{" "}
+                              {it.name}
                               {it.variant ? ` (${it.variant})` : ""}
                               {it.notes ? (
                                 <span className="mt-0.5 block font-bold text-[var(--warn)]">

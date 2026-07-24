@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { apiFetch, useAuth } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { APPROVAL_STATUS_LABEL, label } from "@/lib/labels";
 import { formatMoney } from "@/lib/money";
 
 interface PendingOrder {
@@ -130,7 +131,9 @@ export function ApprovalQueue({
                       </Button>
                     </div>
                   ) : (
-                    <Badge tone="warn">PENDING</Badge>
+                    <Badge tone="warn">
+                      {label(APPROVAL_STATUS_LABEL, "PENDING")}
+                    </Badge>
                   )}
                 </div>
                 <ul className="mt-2 space-y-1 text-sm">

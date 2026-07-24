@@ -6,6 +6,7 @@ import { platformFetch } from "@/components/PlatformAuthProvider";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { RESTAURANT_STATUS_LABEL, label } from "@/lib/labels";
 
 interface Counts {
   total: number;
@@ -139,7 +140,9 @@ export default function PlatformOverviewPage() {
                       <p className="text-xs text-[var(--muted)]">{r.slug}</p>
                     </td>
                     <td className="px-4 py-3">
-                      <Badge tone={statusTone(r.status)}>{r.status}</Badge>
+                      <Badge tone={statusTone(r.status)}>
+                        {label(RESTAURANT_STATUS_LABEL, r.status)}
+                      </Badge>
                     </td>
                     <td className="px-4 py-3 num">{r.branchCount}</td>
                     <td className="px-4 py-3 text-[var(--muted)]">

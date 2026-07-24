@@ -4,6 +4,13 @@ import { useRef } from "react";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { formatMoney } from "@/lib/money";
+import {
+  APPROVAL_STATUS_LABEL,
+  ORDER_STATUS_LABEL,
+  SERVICE_TYPE_LABEL,
+  SESSION_STATUS_LABEL,
+  label,
+} from "@/lib/labels";
 import type { CheckoutData, MenuItem } from "./types";
 import { prefersReducedMotion, statusTone } from "./utils";
 import styles from "./guest-theme.module.css";
@@ -80,7 +87,9 @@ export function GuestTrack({
             Updates every few seconds
           </p>
         </div>
-        <span className={sessionStatusClass(status)}>{status.replaceAll("_", " ")}</span>
+        <span className={sessionStatusClass(status)}>
+          {label(SESSION_STATUS_LABEL, status)}
+        </span>
       </div>
 
       {rounds.length === 0 ? (
@@ -94,11 +103,12 @@ export function GuestTrack({
                   Round {r.roundNumber}
                 </p>
                 <p className={`${styles.roundStatus} ${roundToneClass(r.status)}`} style={{ margin: 0 }}>
-                  {r.status === "DRAFT" || r.approvalStatus === "PENDING"
-                    ? "Awaiting approval"
-                    : r.approvalStatus === "REJECTED"
-                      ? "Rejected"
-                      : r.status}
+                  {r.status === "DRAFT" ||
+                  (r as { approvalStatus?: string }).approvalStatus === "PENDING"
+                    ? label(APPROVAL_STATUS_LABEL, "PENDING")
+                    : (r as { approvalStatus?: string }).approvalStatus === "REJECTED"
+                      ? label(APPROVAL_STATUS_LABEL, "REJECTED")
+                      : label(ORDER_STATUS_LABEL, r.status)}
                 </p>
               </div>
               <ul className={styles.itemList}>
@@ -136,20 +146,14 @@ export function GuestTrack({
       ) : null}
 
       <div className={styles.serviceRow}>
-        {(
-          [
-            ["WAITER", "Call waiter"],
-            ["WATER", "Water"],
-            ["CUTLERY", "Cutlery"],
-          ] as const
-        ).map(([t, label]) => (
+        {(["WAITER", "WATER", "CUTLERY"] as const).map((t) => (
           <button
             key={t}
             type="button"
             className={styles.btnGhost}
             onClick={() => onService(t)}
           >
-            {label}
+            {label(SERVICE_TYPE_LABEL, t)}
           </button>
         ))}
       </div>
@@ -197,7 +201,9 @@ export function GuestTrack({
         >
           Pay {formatMoney(due, currency)}
         </button>
-        <p className={styles.microcopy}>Demo pay · records payment for staff</p>
+        <p className={styles.microcopy}>
+          Simulated payment for demos — staff can also collect at the counter
+        </p>
         <button
           type="button"
           className={styles.btnGhostBlock}
