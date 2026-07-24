@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ink: #12100e;
+  --surface: #faf8f5;
+  --surface-2: #f0ebe3;
+  --accent: #e4572e;
+  --success: #2a9d8f;
+  --warn: #e9c46a;
+  --muted: #6b6560;
+  --border: #e4ddd3;
+  --kds-bg: #12100e;
+  --font-ui: "DM Sans", system-ui, sans-serif;
+  --font-num: "Space Grotesk", system-ui, sans-serif;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.num {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@keyframes pulse-border {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(228, 87, 46, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(228, 87, 46, 0);
+  }
+}
+
+.age-pulse {
+  animation: pulse-border 2.2s ease-in-out infinite;
+}
