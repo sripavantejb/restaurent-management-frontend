@@ -2,9 +2,14 @@ import { z } from "zod";
 import { Table, type ITable } from "@/models/Table";
 import { Order, type IOrder } from "@/models/Order";
 import { TableSession, type ITableSession } from "@/models/TableSession";
+import { QRCode, type IQRCode } from "@/models/QRCode";
 import { withAuth, json, error } from "@/lib/api";
 
 type ActiveOrder = Pick<IOrder, "_id" | "orderNumber" | "tableId" | "status" | "total">;
+
+function appUrl() {
+  return process.env.APP_URL || "http://localhost:3000";
+}
 
 const CreateSchema = z.object({
   number: z.number().int().positive().optional(),
@@ -69,6 +74,25 @@ export const GET = withAuth(async ({ tenant }) => {
     }
   }
 
+  const activeCodes = (await QRCode.find({
+    restaurantId: tenant.restaurantId,
+    branchId: tenant.branchId,
+    type: "TABLE",
+    isActive: true,
+    tableId: { $ne: null },
+  })
+    .select("_id tableId shortCode label scanCount lastScannedAt")
+    .lean()) as unknown as Pick<
+    IQRCode,
+    "_id" | "tableId" | "shortCode" | "label" | "scanCount" | "lastScannedAt"
+  >[];
+
+  const qrByTable = new Map(
+    activeCodes
+      .filter((c) => c.tableId)
+      .map((c) => [c.tableId!.toString(), c])
+  );
+
   return json({
     tables: tables.map((t) => {
       const order = orderByTable.get(t._id.toString());
@@ -77,6 +101,7 @@ export const GET = withAuth(async ({ tenant }) => {
           openSessions.find((s) => s._id.toString() === t.currentSessionId?.toString())) ||
         sessionByTable.get(t._id.toString()) ||
         null;
+      const qr = qrByTable.get(t._id.toString()) || null;
       return {
         id: t._id.toString(),
         number: t.number,
@@ -103,6 +128,16 @@ export const GET = withAuth(async ({ tenant }) => {
               orderNumber: order.orderNumber,
               status: order.status,
               total: order.total,
+            }
+          : null,
+        qrCode: qr
+          ? {
+              id: qr._id.toString(),
+              shortCode: qr.shortCode,
+              shortUrl: `${appUrl()}/q/${qr.shortCode}`,
+              label: qr.label,
+              scanCount: qr.scanCount,
+              lastScannedAt: qr.lastScannedAt ?? null,
             }
           : null,
       };

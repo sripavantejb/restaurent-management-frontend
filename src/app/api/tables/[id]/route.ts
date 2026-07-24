@@ -3,6 +3,7 @@ import { Table } from "@/models/Table";
 import { Order } from "@/models/Order";
 import { TableSession } from "@/models/TableSession";
 import { ServiceRequest } from "@/models/ServiceRequest";
+import { QRCode } from "@/models/QRCode";
 import { withAuth, json, error, getParams } from "@/lib/api";
 
 const UpdateSchema = z.object({
@@ -135,6 +136,16 @@ export const DELETE = withAuth(async ({ req, tenant }) => {
     restaurantId: tenant.restaurantId,
     branchId: tenant.branchId,
   });
+
+  await QRCode.updateMany(
+    {
+      restaurantId: tenant.restaurantId,
+      branchId: tenant.branchId,
+      tableId: id,
+      isActive: true,
+    },
+    { $set: { isActive: false } }
+  );
 
   return json({ ok: true });
 }, "tables.update");

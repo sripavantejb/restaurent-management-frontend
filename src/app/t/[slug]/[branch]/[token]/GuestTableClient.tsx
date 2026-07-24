@@ -186,12 +186,11 @@ export default function GuestTableClient({
         if (bootRes.ok) {
           const fresh = (await bootRes.json()) as Bootstrap;
           setBoot(fresh);
-          if (fresh.openSession?.status === "OPEN") {
+          if (
+            fresh.openSession?.status === "OPEN" ||
+            fresh.openSession?.status === "BILL_REQUESTED"
+          ) {
             ({ res, data } = await postSession("JOIN"));
-          } else if (fresh.openSession?.status === "BILL_REQUESTED") {
-            setError("Your bill is being prepared");
-            setHint("Ask staff to reopen the table before ordering again.");
-            return;
           }
         }
       }
@@ -201,8 +200,15 @@ export default function GuestTableClient({
         setHint(data.hint || "");
         return;
       }
-      setPhase("menu");
+
+      const status = (data.status as string) || "OPEN";
       if (boot.categories[0]) setActiveCat(boot.categories[0].id);
+      if (status === "BILL_REQUESTED") {
+        setPhase("track");
+        void pollCheckout();
+      } else {
+        setPhase("menu");
+      }
     } catch {
       setError("Network error");
       setHint("Try again in a moment.");

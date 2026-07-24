@@ -246,3 +246,60 @@ export const PATCH = withAuth(async ({ req, tenant, user }) => {
     throw err;
   }
 }, "qr.manage");
+
+const DeleteSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    tableId: z.string().min(1).optional(),
+    hard: z.boolean().optional().default(false),
+  })
+  .refine((b) => !!b.id || !!b.tableId, {
+    message: "Provide id or tableId",
+  });
+
+export const DELETE = withAuth(async ({ req, tenant }) => {
+  try {
+    const url = new URL(req.url);
+    const fromQuery = {
+      id: url.searchParams.get("id") || undefined,
+      tableId: url.searchParams.get("tableId") || undefined,
+      hard: url.searchParams.get("hard") === "1",
+    };
+    let body: { id?: string; tableId?: string; hard?: boolean } = fromQuery;
+    try {
+      const parsed = await req.json();
+      body = { ...fromQuery, ...parsed };
+    } catch {
+      /* empty body ok — query params work */
+    }
+    const input = DeleteSchema.parse(body);
+
+    const filter: Record<string, unknown> = {
+      restaurantId: tenant.restaurantId,
+      branchId: tenant.branchId,
+    };
+    if (input.id) filter._id = input.id;
+    if (input.tableId) {
+      filter.tableId = input.tableId;
+      filter.isActive = true;
+    }
+
+    const codes = await QRCode.find(filter);
+    if (codes.length === 0) {
+      return error("QR code not found", 404);
+    }
+
+    if (input.hard) {
+      await QRCode.deleteMany(filter);
+      return json({ ok: true, deleted: codes.length });
+    }
+
+    await QRCode.updateMany(filter, { $set: { isActive: false } });
+    return json({ ok: true, deactivated: codes.length });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return error("Invalid delete request", 400, err.errors[0]?.message);
+    }
+    throw err;
+  }
+}, "qr.manage");

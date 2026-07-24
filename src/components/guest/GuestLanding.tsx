@@ -115,24 +115,27 @@ export function GuestLanding({
           ) : null}
 
           {boot.openSession?.status === "BILL_REQUESTED" ? (
-            <div className={styles.paused} style={{ marginTop: 28 }}>
-              <p style={{ fontWeight: 600, marginBottom: 8 }}>
-                Bill is being prepared
-              </p>
-              <p className={styles.muted} style={{ fontSize: 14, lineHeight: 1.45, margin: 0 }}>
-                Ordering is paused for this table. Ask staff to reopen it if you
-                need to order more.
-              </p>
-              {onRefresh ? (
-                <button
-                  type="button"
-                  className={styles.btnGhostBlock}
-                  style={{ marginTop: 14 }}
-                  onClick={onRefresh}
-                >
-                  Check again
-                </button>
-              ) : null}
+            <div className={styles.stack}>
+              <div className={styles.paused}>
+                <p style={{ fontWeight: 600, marginBottom: 8 }}>
+                  Bill is being prepared
+                </p>
+                <p className={styles.muted} style={{ fontSize: 14, lineHeight: 1.45, margin: 0 }}>
+                  You can view the bill and pay now. Ask staff to reopen the
+                  table if you need to order more.
+                </p>
+              </div>
+              <button
+                type="button"
+                className={styles.btnPrimary}
+                disabled={busy}
+                onClick={onJoin}
+              >
+                {busy ? "Opening…" : "View bill & pay"}
+              </button>
+              <button type="button" className={styles.btnGhostBlock} onClick={onWrongTable}>
+                This isn&apos;t my table
+              </button>
             </div>
           ) : boot.openSession ? (
             <div className={styles.stack}>

@@ -38,6 +38,14 @@ interface TableRow {
     status: string;
     total: number;
   } | null;
+  qrCode: {
+    id: string;
+    shortCode: string;
+    shortUrl: string;
+    label: string;
+    scanCount: number;
+    lastScannedAt: string | null;
+  } | null;
 }
 
 const STATUS_COLOR: Record<string, string> = {
@@ -53,6 +61,7 @@ export default function TablesPage() {
   const { activeBranchId, hasPermission } = useAuth();
   const canEdit = hasPermission("tables.update");
   const canManageSessions = hasPermission("sessions.manage");
+  const canManageQr = hasPermission("qr.manage");
 
   const [tables, setTables] = useState<TableRow[]>([]);
   const [selected, setSelected] = useState<TableRow | null>(null);
@@ -62,6 +71,11 @@ export default function TablesPage() {
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [qrPreview, setQrPreview] = useState<{
+    tableId: string;
+    shortUrl: string;
+    svg: string;
+  } | null>(null);
   const [form, setForm] = useState({
     number: "",
     capacity: "4",
@@ -86,6 +100,11 @@ export default function TablesPage() {
       try {
         const data = await apiFetch("/api/tables", { branchId: activeBranchId });
         setTables(data.tables);
+        setSelected((prev) => {
+          if (!prev) return prev;
+          const next = (data.tables as TableRow[]).find((t) => t.id === prev.id);
+          return next ?? prev;
+        });
         setError("");
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load tables");
@@ -121,6 +140,7 @@ export default function TablesPage() {
 
   function openEdit(t: TableRow) {
     setSelected(t);
+    setQrPreview(null);
     setForm({
       number: String(t.number),
       capacity: String(t.capacity),
@@ -129,6 +149,64 @@ export default function TablesPage() {
         : "SQUARE") as (typeof SHAPES)[number],
       status: t.status,
     });
+  }
+
+  async function generateQr(tableId: string) {
+    if (!canManageQr) return;
+    setBusy(true);
+    try {
+      const data = await apiFetch("/api/qr", {
+        method: "POST",
+        branchId: activeBranchId,
+        body: JSON.stringify({
+          tableIds: [tableId],
+          designId: "classic",
+          fg: "#12100E",
+          bg: "#FFFFFF",
+          printSizeCm: 4,
+        }),
+      });
+      const created = data.created?.[0];
+      if (created) {
+        setQrPreview({
+          tableId,
+          shortUrl: created.shortUrl,
+          svg: created.svg,
+        });
+        showToast(`QR ready for Table ${created.tableNumber}`);
+      }
+      await load(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "QR generate failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteQr(tableId: string) {
+    if (!canManageQr) return;
+    if (
+      !confirm(
+        "Deactivate this table’s QR code? Guests will need a newly generated code."
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    try {
+      await apiFetch("/api/qr", {
+        method: "DELETE",
+        branchId: activeBranchId,
+        body: JSON.stringify({ tableId }),
+      });
+      if (qrPreview?.tableId === tableId) setQrPreview(null);
+      showToast("QR code deactivated");
+      await load(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "QR delete failed");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function createTable() {

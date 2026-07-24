@@ -91,68 +91,63 @@ export const POST = withGuest(async (req) => {
           "Start a new session or ask staff for help."
         );
       }
-      if (session.status === "BILL_REQUESTED") {
-        return guestError(
-          "Your bill is being prepared",
-          409,
-          "Tap to ask staff to reopen the table."
-        );
-      }
+      // BILL_REQUESTED is joinable — guest can view bill & pay; ordering stays locked in cart/orders APIs
+      session.guestCount = Math.max(session.guestCount || 1, body.guestCount);
+      if (body.guestName?.trim()) session.guestName = body.guestName.trim();
+      session.lastActivityAt = new Date();
+      await session.save();
     } else {
       // START
       if (session && session.status === "OPEN") {
         return guestError(
           "Table already in use",
           409,
-          "If this is your table, choose Join. Staff have been notified if this isn't your party.",
-          // Note: we don't expose other party's order details
+          "If this is your table, choose Join. Staff have been notified if this isn't your party."
         );
       }
+      // Bill requested → attach guest to existing session (track/pay), don't create a parallel session
       if (session && session.status === "BILL_REQUESTED") {
-        return guestError(
-          "Your bill is being prepared",
-          409,
-          "Ask staff to reopen the table before ordering again."
-        );
-      }
-      // Recently billed → fresh session OK
-      if (table.status === "OCCUPIED" && !session) {
+        session.guestCount = Math.max(session.guestCount || 1, body.guestCount);
+        if (body.guestName?.trim()) session.guestName = body.guestName.trim();
+        session.lastActivityAt = new Date();
+        await session.save();
+      } else if (table.status === "OCCUPIED" && !session) {
         // occupied without session — staff POS table; alert path
         return guestError(
           "Table already in use",
           409,
           "Please ask your server — this table may have a waiter-taken order."
         );
+      } else {
+        const sessionNumber = await nextSessionNumber(
+          restaurant._id,
+          branch._id,
+          branch.code
+        );
+        session = await TableSession.create({
+          restaurantId: restaurant._id,
+          branchId: branch._id,
+          sessionNumber,
+          tableIds: [table._id],
+          status: "OPEN",
+          source: "QR",
+          guestCount: body.guestCount,
+          guestName: body.guestName || "",
+          orderIds: [],
+          rounds: 0,
+          openedAt: new Date(),
+          lastActivityAt: new Date(),
+        });
+        table.status = "OCCUPIED";
+        table.currentSessionId = session._id;
+        await table.save();
+        await GuestCart.create({
+          restaurantId: restaurant._id,
+          branchId: branch._id,
+          sessionId: session._id,
+          lines: [],
+        });
       }
-
-      const sessionNumber = await nextSessionNumber(
-        restaurant._id,
-        branch._id,
-        branch.code
-      );
-      session = await TableSession.create({
-        restaurantId: restaurant._id,
-        branchId: branch._id,
-        sessionNumber,
-        tableIds: [table._id],
-        status: "OPEN",
-        source: "QR",
-        guestCount: body.guestCount,
-        guestName: body.guestName || "",
-        orderIds: [],
-        rounds: 0,
-        openedAt: new Date(),
-        lastActivityAt: new Date(),
-      });
-      table.status = "OCCUPIED";
-      table.currentSessionId = session._id;
-      await table.save();
-      await GuestCart.create({
-        restaurantId: restaurant._id,
-        branchId: branch._id,
-        sessionId: session._id,
-        lines: [],
-      });
     }
 
     await recomputeSessionTotals(session!._id);
