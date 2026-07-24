@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { apiUrl } from "@/lib/api-url";
 
 export interface PlatformAdminUser {
   id: string;
@@ -29,7 +30,9 @@ export function PlatformAuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
-    const res = await fetch("/api/platform/auth/me");
+    const res = await fetch(apiUrl("/api/platform/auth/me"), {
+      credentials: "include",
+    });
     if (!res.ok) {
       setAdmin(null);
       setLoading(false);
@@ -45,7 +48,10 @@ export function PlatformAuthProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   const logout = async () => {
-    await fetch("/api/platform/auth/logout", { method: "POST" });
+    await fetch(apiUrl("/api/platform/auth/logout"), {
+      method: "POST",
+      credentials: "include",
+    });
     setAdmin(null);
     window.location.href = "/admin/login";
   };
@@ -70,7 +76,11 @@ export async function platformFetch(path: string, options: RequestInit = {}) {
   if (!headers.has("Content-Type") && options.body) {
     headers.set("Content-Type", "application/json");
   }
-  const res = await fetch(path, { ...options, headers });
+  const res = await fetch(apiUrl(path), {
+    ...options,
+    headers,
+    credentials: "include",
+  });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error(data.error || data.hint || "Request failed");

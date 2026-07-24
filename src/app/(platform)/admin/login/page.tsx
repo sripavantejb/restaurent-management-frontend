@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { PlatformAuthProvider, usePlatformAuth } from "@/components/PlatformAuthProvider";
+import { apiUrl } from "@/lib/api-url";
 
 function LoginForm() {
   const router = useRouter();
@@ -19,9 +20,10 @@ function LoginForm() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/platform/auth/login", {
+      const res = await fetch(apiUrl("/api/platform/auth/login"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ email, password }),
       });
       const data = await res.json();

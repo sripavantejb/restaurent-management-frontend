@@ -9,6 +9,7 @@ import {
   type CSSProperties,
 } from "react";
 import { formatMoney } from "@/lib/money";
+import { apiUrl } from "@/lib/api-url";
 
 type Phase = "loading" | "invalid" | "landing" | "menu" | "track";
 
@@ -191,7 +192,9 @@ export default function GuestTableClient({
     setError("");
     try {
       const qs = new URLSearchParams({ slug, branch, token, v: version });
-      const res = await fetch(`/api/guest/bootstrap?${qs}`);
+      const res = await fetch(apiUrl(`/api/guest/bootstrap?${qs}`), {
+        credentials: "include",
+      });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || "This code is out of date");
@@ -218,7 +221,9 @@ export default function GuestTableClient({
       }
 
       // Resume if cookie session already exists
-      const sessRes = await fetch("/api/guest/session");
+      const sessRes = await fetch(apiUrl("/api/guest/session"), {
+        credentials: "include",
+      });
       const sess = await sessRes.json();
       if (sess.session) {
         if (b.categories[0]) setActiveCat(b.categories[0].id);
@@ -241,7 +246,9 @@ export default function GuestTableClient({
 
   const pollCheckout = useCallback(async () => {
     try {
-      const res = await fetch("/api/guest/checkout");
+      const res = await fetch(apiUrl("/api/guest/checkout"), {
+        credentials: "include",
+      });
       if (!res.ok) return;
       const data = (await res.json()) as CheckoutData;
       setCheckout(data);
@@ -265,9 +272,10 @@ export default function GuestTableClient({
     setBusy(true);
     setError("");
     try {
-      const res = await fetch("/api/guest/session", {
+      const res = await fetch(apiUrl("/api/guest/session"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           slug,
           branchCode: branch,
@@ -360,9 +368,10 @@ export default function GuestTableClient({
     placingRef.current = true;
     setBusy(true);
     try {
-      const put = await fetch("/api/guest/cart", {
+      const put = await fetch(apiUrl("/api/guest/cart"), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           lines: cart.map((l) => ({
             menuItemId: l.menuItemId,
@@ -381,12 +390,13 @@ export default function GuestTableClient({
       }
 
       const key = uid();
-      const res = await fetch("/api/guest/orders", {
+      const res = await fetch(apiUrl("/api/guest/orders"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Idempotency-Key": key,
         },
+        credentials: "include",
         body: JSON.stringify({ idempotencyKey: key }),
       });
       const data = await res.json();
@@ -416,9 +426,10 @@ export default function GuestTableClient({
 
   async function service(type: "WAITER" | "WATER" | "CUTLERY" | "BILL") {
     try {
-      const res = await fetch("/api/guest/service", {
+      const res = await fetch(apiUrl("/api/guest/service"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ type }),
       });
       const data = await res.json();
@@ -443,9 +454,10 @@ export default function GuestTableClient({
     setBusy(true);
     try {
       if (opts.payAtCounter) {
-        const res = await fetch("/api/guest/checkout", {
+        const res = await fetch(apiUrl("/api/guest/checkout"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify({ action: "REQUEST_BILL", payAtCounter: true }),
         });
         const data = await res.json();
@@ -457,9 +469,10 @@ export default function GuestTableClient({
         void pollCheckout();
         return;
       }
-      const res = await fetch("/api/guest/checkout", {
+      const res = await fetch(apiUrl("/api/guest/checkout"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           action: "PAY",
           method: "UPI",

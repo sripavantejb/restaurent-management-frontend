@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import type { Permission, Role } from "@/lib/rbac";
+import { apiUrl } from "@/lib/api-url";
 
 export interface AuthUser {
   id: string;
@@ -50,7 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
-    const res = await fetch("/api/auth/me");
+    const res = await fetch(apiUrl("/api/auth/me"), { credentials: "include" });
     if (!res.ok) {
       setUser(null);
       setRestaurant(null);
@@ -83,7 +84,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    await fetch("/api/auth/logout", { method: "POST" });
+    await fetch(apiUrl("/api/auth/logout"), {
+      method: "POST",
+      credentials: "include",
+    });
     setUser(null);
     window.location.href = "/login";
   };
@@ -126,7 +130,11 @@ export async function apiFetch(
   if (!h.has("Content-Type") && rest.body) {
     h.set("Content-Type", "application/json");
   }
-  const res = await fetch(path, { ...rest, headers: h });
+  const res = await fetch(apiUrl(path), {
+    ...rest,
+    headers: h,
+    credentials: "include",
+  });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error(data.error || data.hint || "Request failed");

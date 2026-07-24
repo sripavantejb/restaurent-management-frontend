@@ -9,8 +9,10 @@ import bcrypt from "bcryptjs";
 
 // Load .env.local without dotenv package (backend/ or frontend/)
 const envCandidates = [
+  resolve(process.cwd(), ".env"),
   resolve(process.cwd(), ".env.local"),
   resolve(process.cwd(), "../frontend/.env.local"),
+  resolve(process.cwd(), "../frontend/.env"),
   resolve(process.cwd(), "frontend/.env.local"),
 ];
 for (const envPath of envCandidates) {
@@ -289,8 +291,8 @@ async function main() {
   });
 
   const restaurant = await Restaurant.create({
-    name: "Spice Route",
-    slug: "spice-route",
+    name: "Tiffinate",
+    slug: "tiffinate",
     status: "ACTIVE",
     contactEmail: "owner@demo.com",
     contactPhone: "",
