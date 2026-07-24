@@ -27,7 +27,7 @@ export function GuestHeader({
           <p className={styles.brandTiny}>{restaurantName}</p>
           <p className={styles.tableTitle}>Table {tableNumber}</p>
         </div>
-        <div className={styles.dietRow}>
+        <div className={styles.dietRow} role="group" aria-label="Diet filter">
           {(["all", "veg", "egg", "nonveg"] as Diet[]).map((d) => (
             <button
               key={d}
@@ -44,9 +44,9 @@ export function GuestHeader({
         <input
           value={search}
           onChange={(e) => onSearch(e.target.value)}
-          placeholder="Search menu"
+          placeholder="Search biryani, naan, coffee…"
           className={styles.input}
-          style={{ marginTop: 10 }}
+          style={{ marginTop: 12 }}
           aria-label="Search menu"
         />
       ) : null}

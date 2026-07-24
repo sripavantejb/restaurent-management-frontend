@@ -168,7 +168,7 @@ export default function KdsPage() {
         </p>
       ) : null}
 
-      <div className="grid min-h-0 flex-1 grid-cols-4 gap-2 p-2">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-2 overflow-auto p-2 sm:grid-cols-2 xl:grid-cols-4">
         {(
           [
             ["NEW", cols.NEW],
@@ -177,7 +177,7 @@ export default function KdsPage() {
             ["SERVED", cols.SERVED],
           ] as const
         ).map(([title, list]) => (
-          <section key={title} className="flex min-h-0 flex-col rounded-[6px] bg-[#1a1714] p-2">
+          <section key={title} className="flex min-h-[280px] flex-col rounded-[6px] bg-[#1a1714] p-2 xl:min-h-0">
             <h2 className="mb-2 px-1 text-xs font-semibold tracking-[0.15em] text-[#9a938a] uppercase">
               {title} · {list.length}
             </h2>

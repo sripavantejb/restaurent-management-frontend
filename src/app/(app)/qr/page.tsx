@@ -22,6 +22,8 @@ export default function QrPage() {
   const [codes, setCodes] = useState<QrCodeRow[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState("");
+  const [toast, setToast] = useState("");
 
   const load = useCallback(async () => {
     if (!activeBranchId) return;
@@ -41,9 +43,34 @@ export default function QrPage() {
     void load();
   }, [load]);
 
+  async function deleteCode(c: QrCodeRow) {
+    const message = c.isActive
+      ? `Deactivate "${c.label}"? Guests with printed codes will need a new one after regenerate.`
+      : `Permanently delete "${c.label}"?`;
+    if (!confirm(message)) return;
+    setBusyId(c.id);
+    try {
+      await apiFetch("/api/qr", {
+        method: "DELETE",
+        branchId: activeBranchId,
+        body: JSON.stringify({
+          id: c.id,
+          hard: !c.isActive,
+        }),
+      });
+      setToast(c.isActive ? "QR deactivated" : "QR deleted");
+      setTimeout(() => setToast(""), 2500);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setBusyId("");
+    }
+  }
+
   if (!hasPermission("qr.manage")) {
     return (
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <h1 className="text-2xl font-semibold tracking-tight">QR codes</h1>
         <p className="mt-2 text-sm text-[var(--muted)]">
           You need the <code className="text-[var(--ink)]">qr.manage</code> permission.
@@ -62,14 +89,23 @@ export default function QrPage() {
           </p>
           <h1 className="text-2xl font-semibold tracking-tight">QR codes</h1>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            Turn customer QR ordering on/off in{" "}
+            Generate from here or from{" "}
+            <Link href="/tables" className="text-[var(--accent)] underline">
+              Tables
+            </Link>
+            . Toggle guest ordering in{" "}
             <Link href="/settings" className="text-[var(--accent)] underline">
               Settings
             </Link>
             .
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {toast ? (
+            <span className="rounded-[6px] bg-[var(--success)]/15 px-3 py-1 text-sm text-[var(--success)]">
+              {toast}
+            </span>
+          ) : null}
           <Link href="/qr/generate">
             <Button>Generate</Button>
           </Link>
@@ -110,11 +146,11 @@ export default function QrPage() {
                 <div className="flex items-start justify-between gap-2">
                   <h2 className="font-semibold text-[var(--ink)]">{c.label}</h2>
                   <span
-                    className={`rounded-[6px] px-2 py-0.5 text-[11px] font-medium ${
+                    className={
                       c.isActive
-                        ? "bg-[var(--success)]/15 text-[var(--success)]"
-                        : "bg-[var(--surface-2)] text-[var(--muted)]"
-                    }`}
+                        ? "rounded-[6px] bg-[var(--success)]/15 px-2 py-0.5 text-[11px] font-medium text-[var(--success)]"
+                        : "rounded-[6px] bg-[var(--surface-2)] px-2 py-0.5 text-[11px] font-medium text-[var(--muted)]"
+                    }
                   >
                     {c.isActive ? "Active" : "Inactive"}
                   </span>
@@ -131,15 +167,25 @@ export default function QrPage() {
                     ? new Date(c.lastScannedAt).toLocaleString("en-IN")
                     : "never"}
                 </p>
-                <div className="mt-3 flex gap-2">
-                  <a
-                    href={c.shortUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex h-9 items-center rounded-[6px] border border-[var(--border)] px-3 text-xs font-medium hover:bg-[var(--surface-2)]"
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {c.isActive ? (
+                    <a
+                      href={c.shortUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex h-9 items-center rounded-[6px] border border-[var(--border)] px-3 text-xs font-medium hover:bg-[var(--surface-2)]"
+                    >
+                      Test scan
+                    </a>
+                  ) : null}
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    disabled={busyId === c.id}
+                    onClick={() => void deleteCode(c)}
                   >
-                    Test scan
-                  </a>
+                    {c.isActive ? "Deactivate" : "Delete"}
+                  </Button>
                 </div>
               </article>
             ))}

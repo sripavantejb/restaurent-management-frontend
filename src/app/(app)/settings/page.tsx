@@ -39,7 +39,7 @@ export default function SettingsPage() {
 
   if (!hasPermission("qr.manage")) {
     return (
-      <div className="p-6 text-sm text-[var(--muted)]">
+      <div className="p-4 text-sm text-[var(--muted)] sm:p-6">
         Only restaurant admins can change QR ordering settings.
       </div>
     );
@@ -65,15 +65,15 @@ export default function SettingsPage() {
 
   if (!settings) {
     return (
-      <div className="p-6 text-[var(--muted)]">
+      <div className="p-4 text-[var(--muted)] sm:p-6">
         {error || "Loading settings…"}
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex items-end justify-between gap-3">
+    <div className="space-y-6 p-4 sm:p-6">
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-end">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
           <p className="mt-1 text-sm text-[var(--muted)]">

@@ -282,9 +282,39 @@ export default function TablesPage() {
       });
       setTables((prev) => prev.filter((t) => t.id !== selected.id));
       setSelected(null);
+      setQrPreview(null);
       showToast("Table deleted");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function generateMissingQrs() {
+    if (!canManageQr) return;
+    const missing = tables.filter((t) => !t.qrCode).map((t) => t.id);
+    if (missing.length === 0) {
+      showToast("Every table already has a QR");
+      return;
+    }
+    setBusy(true);
+    try {
+      const data = await apiFetch("/api/qr", {
+        method: "POST",
+        branchId: activeBranchId,
+        body: JSON.stringify({
+          tableIds: missing,
+          designId: "classic",
+          fg: "#12100E",
+          bg: "#FFFFFF",
+          printSizeCm: 4,
+        }),
+      });
+      showToast(`Generated ${(data.created ?? []).length} QR codes`);
+      await load(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Bulk QR generate failed");
     } finally {
       setBusy(false);
     }
@@ -413,7 +443,7 @@ export default function TablesPage() {
   const listSorted = [...tables].sort((a, b) => a.number - b.number);
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Floor plan</h1>
@@ -428,6 +458,15 @@ export default function TablesPage() {
             <span className="rounded-[6px] bg-[var(--success)]/15 px-3 py-1 text-sm text-[var(--success)]">
               {toast}
             </span>
+          ) : null}
+          {canManageQr ? (
+            <Button
+              variant="secondary"
+              disabled={busy || tables.every((t) => t.qrCode)}
+              onClick={() => void generateMissingQrs()}
+            >
+              Generate missing QRs
+            </Button>
           ) : null}
           {canEdit ? (
             <>
@@ -500,7 +539,7 @@ export default function TablesPage() {
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_300px]">
         <div
-          className="overflow-auto rounded-[6px] border border-[var(--border)] bg-[var(--surface-2)] p-4"
+          className="hidden overflow-auto rounded-[6px] border border-[var(--border)] bg-[var(--surface-2)] p-4 md:block"
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
@@ -548,6 +587,7 @@ export default function TablesPage() {
                     {t.currentSession?.status === "BILL_REQUESTED"
                       ? "BILL"
                       : `${t.capacity}p`}
+                    {t.qrCode ? " · QR" : ""}
                   </span>
                 </button>
               ))}
@@ -561,8 +601,11 @@ export default function TablesPage() {
           <div className="rounded-[6px] border border-[var(--border)] bg-white">
             <div className="border-b border-[var(--border)] px-3 py-2 text-xs font-semibold tracking-wide text-[var(--muted)] uppercase">
               Tables · {tables.length}
+              <span className="ml-2 font-normal normal-case md:hidden">
+                (floor plan on larger screens)
+              </span>
             </div>
-            <ul className="max-h-[320px] overflow-auto">
+            <ul className="max-h-[min(60vh,480px)] overflow-auto md:max-h-[320px]">
               {listSorted.map((t) => (
                 <li
                   key={t.id}
@@ -576,6 +619,7 @@ export default function TablesPage() {
                     <span className="num font-medium">T{t.number}</span>
                     <span className="ml-2 text-xs text-[var(--muted)]">
                       {t.capacity}p · {t.currentSession?.status ?? t.status}
+                      {t.qrCode ? " · QR" : " · no QR"}
                     </span>
                   </button>
                   {editMode && canEdit ? (
@@ -807,6 +851,68 @@ export default function TablesPage() {
               </p>
             ) : null}
 
+            <div className="rounded-[6px] border border-[var(--border)] p-3">
+              <p className="text-xs uppercase tracking-wide text-[var(--muted)]">
+                Table QR
+              </p>
+              {selected.qrCode ? (
+                <>
+                  <p className="mt-1 break-all font-mono text-xs text-[var(--muted)]">
+                    {selected.qrCode.shortUrl}
+                  </p>
+                  <p className="mt-1 text-xs text-[var(--muted)]">
+                    {selected.qrCode.scanCount} scans
+                    {selected.qrCode.lastScannedAt
+                      ? ` · last ${new Date(
+                          selected.qrCode.lastScannedAt
+                        ).toLocaleString("en-IN")}`
+                      : " · never scanned"}
+                  </p>
+                </>
+              ) : (
+                <p className="mt-1 text-sm text-[var(--muted)]">
+                  No active QR for this table yet.
+                </p>
+              )}
+              {qrPreview?.tableId === selected.id && qrPreview.svg ? (
+                <div
+                  className="mx-auto mt-3 w-40 [&_svg]:h-full [&_svg]:w-full"
+                  dangerouslySetInnerHTML={{ __html: qrPreview.svg }}
+                />
+              ) : null}
+              {canManageQr ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => void generateQr(selected.id)}
+                  >
+                    {selected.qrCode ? "Regenerate QR" : "Generate QR"}
+                  </Button>
+                  {selected.qrCode ? (
+                    <>
+                      <a
+                        href={selected.qrCode.shortUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex h-8 items-center rounded-[6px] border border-[var(--border)] px-3 text-xs font-medium hover:bg-[var(--surface-2)]"
+                      >
+                        Test scan
+                      </a>
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        disabled={busy}
+                        onClick={() => void deleteQr(selected.id)}
+                      >
+                        Delete QR
+                      </Button>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+
             {canEdit ? (
               <div className="flex gap-2 pt-1">
                 <Button
@@ -821,7 +927,7 @@ export default function TablesPage() {
                   disabled={busy || selected.status !== "FREE"}
                   onClick={() => void deleteSelected()}
                 >
-                  Delete
+                  Delete table
                 </Button>
               </div>
             ) : null}

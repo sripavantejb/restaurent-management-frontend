@@ -259,14 +259,14 @@ export default function PosPage() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--border)] px-4">
-        <div className="flex items-center gap-2">
+      <header className="flex h-auto min-h-14 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2 sm:px-4">
+        <div className="flex flex-wrap items-center gap-2">
           {(["DINE_IN", "TAKEAWAY"] as const).map((t) => (
             <button
               key={t}
               type="button"
               onClick={() => cart.setType(t)}
-              className={`h-10 rounded-[6px] px-4 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)] ${
+              className={`h-10 rounded-[6px] px-3 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)] sm:px-4 ${
                 cart.type === t
                   ? "bg-[var(--ink)] text-white"
                   : "border border-[var(--border)] text-[var(--muted)]"
@@ -294,13 +294,13 @@ export default function PosPage() {
         </p>
       ) : null}
 
-      <div className="flex min-h-0 flex-1">
-        {/* Category rail */}
-        <div className="flex w-[200px] shrink-0 flex-col gap-1 overflow-auto border-r border-[var(--border)] p-2">
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+        {/* Category rail — horizontal on mobile, vertical on desktop */}
+        <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-[var(--border)] p-2 lg:w-[200px] lg:flex-col lg:overflow-auto lg:border-r lg:border-b-0">
           <button
             type="button"
             onClick={() => setCatId("all")}
-            className={`min-h-12 rounded-[6px] px-3 text-left text-sm font-medium ${
+            className={`min-h-10 shrink-0 rounded-[6px] px-3 text-left text-sm font-medium whitespace-nowrap lg:min-h-12 ${
               catId === "all" ? "bg-[var(--accent)] text-white" : "hover:bg-[var(--surface-2)]"
             }`}
           >
@@ -311,7 +311,7 @@ export default function PosPage() {
               key={c.id}
               type="button"
               onClick={() => setCatId(c.id)}
-              className={`min-h-12 rounded-[6px] px-3 text-left text-sm font-medium ${
+              className={`min-h-10 shrink-0 rounded-[6px] px-3 text-left text-sm font-medium whitespace-nowrap lg:min-h-12 ${
                 catId === c.id ? "bg-[var(--accent)] text-white" : "hover:bg-[var(--surface-2)]"
               }`}
             >
@@ -321,7 +321,7 @@ export default function PosPage() {
         </div>
 
         {/* Menu grid */}
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <div className="relative border-b border-[var(--border)] p-3">
             <Search
               size={16}
@@ -335,7 +335,7 @@ export default function PosPage() {
               onChange={(e) => setQ(e.target.value)}
             />
           </div>
-          <div className="grid grid-cols-3 gap-2 overflow-auto p-3 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 overflow-auto p-3 sm:grid-cols-3 lg:grid-cols-4">
             {filtered.length === 0 ? (
               <p className="col-span-full text-sm text-[var(--muted)]">
                 No items match. Clear search or pick another category.
@@ -371,7 +371,7 @@ export default function PosPage() {
         </div>
 
         {/* Cart */}
-        <div className="flex w-[380px] shrink-0 flex-col border-l border-[var(--border)] bg-white">
+        <div className="flex max-h-[45vh] w-full shrink-0 flex-col border-t border-[var(--border)] bg-white lg:max-h-none lg:w-[380px] lg:border-t-0 lg:border-l">
           <div className="border-b border-[var(--border)] px-4 py-3">
             <h2 className="font-semibold">Current bill</h2>
             <p className="text-xs text-[var(--muted)]">

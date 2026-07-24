@@ -48,7 +48,7 @@ export default function QrAnalyticsPage() {
 
   if (!hasPermission("qr.manage")) {
     return (
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <h1 className="text-2xl font-semibold">QR analytics</h1>
         <p className="mt-2 text-sm text-[var(--muted)]">
           Missing <code>qr.manage</code> permission.
