@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch, useAuth } from "@/components/AuthProvider";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import { ApprovalQueue } from "@/components/ApprovalQueue";
 import { formatMoney } from "@/lib/money";
 
 interface Order {
@@ -13,6 +14,9 @@ interface Order {
   orderNumber: string;
   type: string;
   status: string;
+  approvalStatus?: string;
+  placedBy?: string;
+  tableId?: string | null;
   total: number;
   placedAt: string | null;
   items: { name: string; qty: number; unitPrice: number; notes: string }[];
@@ -24,6 +28,7 @@ interface Order {
 export default function OrdersPage() {
   const { activeBranchId } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
+  const [tableMap, setTableMap] = useState<Record<string, number>>({});
   const [status, setStatus] = useState("");
   const [type, setType] = useState("");
   const [from, setFrom] = useState("");
@@ -35,6 +40,7 @@ export default function OrdersPage() {
     paidAt: string;
   } | null>(null);
   const [error, setError] = useState("");
+  const [busyApprove, setBusyApprove] = useState(false);
 
   const load = useCallback(async () => {
     if (!activeBranchId) return;
@@ -44,10 +50,16 @@ export default function OrdersPage() {
     if (from) params.set("from", from);
     if (to) params.set("to", to);
     try {
-      const data = await apiFetch(`/api/orders?${params}`, {
-        branchId: activeBranchId,
-      });
+      const [data, tables] = await Promise.all([
+        apiFetch(`/api/orders?${params}`, { branchId: activeBranchId }),
+        apiFetch("/api/tables", { branchId: activeBranchId }),
+      ]);
       setOrders(data.orders);
+      const map: Record<string, number> = {};
+      for (const t of tables.tables as { id: string; number: number }[]) {
+        map[t.id] = t.number;
+      }
+      setTableMap(map);
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load orders");
@@ -56,7 +68,17 @@ export default function OrdersPage() {
 
   useEffect(() => {
     void load();
+    const t = setInterval(() => void load(), 5000);
+    return () => clearInterval(t);
   }, [load]);
+
+  const pendingCount = useMemo(
+    () =>
+      orders.filter(
+        (o) => o.status === "DRAFT" && o.approvalStatus === "PENDING"
+      ).length,
+    [orders]
+  );
 
   async function openDetail(order: Order) {
     setSelected(order);
@@ -65,8 +87,27 @@ export default function OrdersPage() {
         branchId: activeBranchId,
       });
       setPayment(data.payment);
+      if (data.order) setSelected({ ...order, ...data.order });
     } catch {
       setPayment(null);
+    }
+  }
+
+  async function approveSelected(action: "APPROVE" | "REJECT") {
+    if (!selected) return;
+    setBusyApprove(true);
+    try {
+      await apiFetch(`/api/orders/${selected.id}/approve`, {
+        method: "POST",
+        branchId: activeBranchId,
+        body: JSON.stringify({ action }),
+      });
+      setSelected(null);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Approval failed");
+    } finally {
+      setBusyApprove(false);
     }
   }
 
@@ -74,97 +115,148 @@ export default function OrdersPage() {
     <div className="p-6">
       <h1 className="text-2xl font-semibold tracking-tight">Orders</h1>
       <p className="mt-1 text-sm text-[var(--muted)]">
-        Filter by date, status, or type. Click a row for the full bill.
+        Filter by date, status, or type. Approve guest QR drafts, then bill from
+        the row detail.
+        {pendingCount > 0
+          ? ` · ${pendingCount} awaiting approval in this list.`
+          : ""}
       </p>
 
-      <div className="mt-4 flex flex-wrap gap-2">
-        <select
-          className="h-10 rounded-[6px] border border-[var(--border)] bg-white px-2 text-sm"
-          value={status}
-          onChange={(e) => setStatus(e.target.value)}
-        >
-          <option value="">All statuses</option>
-          {["PLACED", "PREPARING", "READY", "SERVED", "COMPLETED", "CANCELLED"].map(
-            (s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            )
-          )}
-        </select>
-        <select
-          className="h-10 rounded-[6px] border border-[var(--border)] bg-white px-2 text-sm"
-          value={type}
-          onChange={(e) => setType(e.target.value)}
-        >
-          <option value="">All types</option>
-          <option value="DINE_IN">Dine-in</option>
-          <option value="TAKEAWAY">Takeaway</option>
-        </select>
-        <Input type="date" className="w-auto" value={from} onChange={(e) => setFrom(e.target.value)} />
-        <Input type="date" className="w-auto" value={to} onChange={(e) => setTo(e.target.value)} />
-        <Button variant="secondary" onClick={() => void load()}>
-          Apply
-        </Button>
-      </div>
+      <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_320px]">
+        <div>
+          <div className="flex flex-wrap gap-2">
+            <select
+              className="h-10 rounded-[6px] border border-[var(--border)] bg-white px-2 text-sm"
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+            >
+              <option value="">All statuses</option>
+              <option value="pending_approval">Pending approval</option>
+              {[
+                "DRAFT",
+                "PLACED",
+                "PREPARING",
+                "READY",
+                "SERVED",
+                "COMPLETED",
+                "CANCELLED",
+              ].map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+            <select
+              className="h-10 rounded-[6px] border border-[var(--border)] bg-white px-2 text-sm"
+              value={type}
+              onChange={(e) => setType(e.target.value)}
+            >
+              <option value="">All types</option>
+              <option value="DINE_IN">Dine-in</option>
+              <option value="TAKEAWAY">Takeaway</option>
+            </select>
+            <Input
+              type="date"
+              className="w-auto"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+            />
+            <Input
+              type="date"
+              className="w-auto"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+            />
+            <Button variant="secondary" onClick={() => void load()}>
+              Apply
+            </Button>
+          </div>
 
-      {error ? (
-        <p className="mt-4 rounded-[6px] border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-          {error}
-        </p>
-      ) : null}
+          {error ? (
+            <p className="mt-4 rounded-[6px] border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+              {error}
+            </p>
+          ) : null}
 
-      <div className="mt-4 overflow-auto rounded-[6px] border border-[var(--border)] bg-white">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-[var(--border)] bg-[var(--surface-2)] text-xs text-[var(--muted)]">
-            <tr>
-              <th className="px-3 py-2 font-medium">Order</th>
-              <th className="px-3 py-2 font-medium">Type</th>
-              <th className="px-3 py-2 font-medium">Status</th>
-              <th className="px-3 py-2 font-medium">Placed</th>
-              <th className="px-3 py-2 font-medium text-right">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {orders.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-3 py-8 text-center text-[var(--muted)]">
-                  No orders in this range. Place one from POS or widen the filters.
-                </td>
-              </tr>
-            ) : (
-              orders.map((o) => (
-                <tr
-                  key={o.id}
-                  className="cursor-pointer border-b border-[var(--border)] hover:bg-[var(--surface-2)]"
-                  onClick={() => void openDetail(o)}
-                >
-                  <td className="num px-3 py-2.5 font-medium">{o.orderNumber}</td>
-                  <td className="px-3 py-2.5">{o.type}</td>
-                  <td className="px-3 py-2.5">
-                    <Badge
-                      tone={
-                        o.status === "COMPLETED"
-                          ? "success"
-                          : o.status === "CANCELLED"
-                            ? "danger"
-                            : "accent"
-                      }
-                    >
-                      {o.status}
-                    </Badge>
-                  </td>
-                  <td className="px-3 py-2.5 text-[var(--muted)]">
-                    {o.placedAt
-                      ? new Date(o.placedAt).toLocaleString("en-IN")
-                      : "—"}
-                  </td>
-                  <td className="num px-3 py-2.5 text-right">{formatMoney(o.total)}</td>
+          <div className="mt-4 overflow-auto rounded-[6px] border border-[var(--border)] bg-white">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-[var(--border)] bg-[var(--surface-2)] text-xs text-[var(--muted)]">
+                <tr>
+                  <th className="px-3 py-2 font-medium">Order</th>
+                  <th className="px-3 py-2 font-medium">Type</th>
+                  <th className="px-3 py-2 font-medium">Status</th>
+                  <th className="px-3 py-2 font-medium">Placed</th>
+                  <th className="px-3 py-2 font-medium text-right">Total</th>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              </thead>
+              <tbody>
+                {orders.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={5}
+                      className="px-3 py-8 text-center text-[var(--muted)]"
+                    >
+                      No orders in this range. Place one from POS or widen the
+                      filters.
+                    </td>
+                  </tr>
+                ) : (
+                  orders.map((o) => (
+                    <tr
+                      key={o.id}
+                      className="cursor-pointer border-b border-[var(--border)] hover:bg-[var(--surface-2)]"
+                      onClick={() => void openDetail(o)}
+                    >
+                      <td className="num px-3 py-2.5 font-medium">
+                        {o.orderNumber}
+                        {o.tableId && tableMap[o.tableId] != null ? (
+                          <span className="ml-1 text-xs text-[var(--muted)]">
+                            T{tableMap[o.tableId]}
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        {o.type}
+                        {o.placedBy === "GUEST" ? (
+                          <span className="ml-1 text-xs text-[var(--muted)]">
+                            QR
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <Badge
+                          tone={
+                            o.status === "COMPLETED"
+                              ? "success"
+                              : o.status === "CANCELLED"
+                                ? "danger"
+                                : o.status === "DRAFT"
+                                  ? "warn"
+                                  : "accent"
+                          }
+                        >
+                          {o.approvalStatus === "PENDING"
+                            ? "PENDING APPROVAL"
+                            : o.status}
+                        </Badge>
+                      </td>
+                      <td className="px-3 py-2.5 text-[var(--muted)]">
+                        {o.placedAt
+                          ? new Date(o.placedAt).toLocaleString("en-IN")
+                          : "—"}
+                      </td>
+                      <td className="num px-3 py-2.5 text-right">
+                        {formatMoney(o.total)}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <ApprovalQueue tableNumbers={tableMap} />
       </div>
 
       <Modal
@@ -174,9 +266,12 @@ export default function OrdersPage() {
       >
         {selected ? (
           <div className="space-y-3">
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Badge>{selected.type}</Badge>
               <Badge tone="accent">{selected.status}</Badge>
+              {selected.approvalStatus && selected.approvalStatus !== "NONE" ? (
+                <Badge tone="warn">{selected.approvalStatus}</Badge>
+              ) : null}
             </div>
             <ul className="space-y-2 border-y border-[var(--border)] py-3">
               {selected.items.map((it, i) => (
@@ -189,7 +284,9 @@ export default function OrdersPage() {
                       </span>
                     ) : null}
                   </span>
-                  <span className="num">{formatMoney(it.unitPrice * it.qty)}</span>
+                  <span className="num">
+                    {formatMoney(it.unitPrice * it.qty)}
+                  </span>
                 </li>
               ))}
             </ul>
@@ -200,7 +297,9 @@ export default function OrdersPage() {
               </div>
               <div className="flex justify-between text-[var(--muted)]">
                 <span>Discount</span>
-                <span className="num">−{formatMoney(selected.discountAmount)}</span>
+                <span className="num">
+                  −{formatMoney(selected.discountAmount)}
+                </span>
               </div>
               <div className="flex justify-between text-[var(--muted)]">
                 <span>Tax</span>
@@ -211,12 +310,34 @@ export default function OrdersPage() {
                 <span className="num">{formatMoney(selected.total)}</span>
               </div>
             </div>
-            {payment ? (
+
+            {selected.status === "DRAFT" &&
+            selected.approvalStatus === "PENDING" ? (
+              <div className="flex gap-2">
+                <Button
+                  className="flex-1"
+                  disabled={busyApprove}
+                  onClick={() => void approveSelected("APPROVE")}
+                >
+                  Approve to kitchen
+                </Button>
+                <Button
+                  className="flex-1"
+                  variant="danger"
+                  disabled={busyApprove}
+                  onClick={() => void approveSelected("REJECT")}
+                >
+                  Reject
+                </Button>
+              </div>
+            ) : payment ? (
               <p className="rounded-[6px] bg-[var(--success)]/10 px-3 py-2 text-sm text-[var(--success)]">
                 Paid via {payment.method} · {formatMoney(payment.amount)} ·{" "}
                 {new Date(payment.paidAt).toLocaleString("en-IN")}
               </p>
-            ) : selected.status !== "CANCELLED" && selected.status !== "COMPLETED" ? (
+            ) : selected.status !== "CANCELLED" &&
+              selected.status !== "COMPLETED" &&
+              selected.status !== "DRAFT" ? (
               <div className="space-y-2">
                 <p className="text-sm text-[var(--muted)]">
                   Unpaid. Collect with UPI / Card / Cash below (cashier).

@@ -9,7 +9,7 @@ Dependency order for the remaining product surface. Inventory must land before p
 5. **Finance** — GL, P&L by branch, GST returns export (depends on payments + procurement)  
 6. **Reservations** — table booking calendar tied to floor plan status  
 7. **CRM** — guests, visits, preferences, loyalty points from completed orders  
-8. **QR ordering** — guest menu → draft orders; reuses Order model  
+8. ~~**QR ordering**~~ — **shipped** (guest menu → cart → session → service requests → staff approval → KDS → bill); see `QR-CUTS.md`  
 9. **HRMS** — staff profiles, attendance, shifts (extends User)  
 10. **Payroll** — salaries, tips pooling; depends on HRMS attendance  
 11. **AI** — demand forecasting, 86 suggestions, prep-time predictions  
@@ -24,4 +24,5 @@ Dependency order for the remaining product surface. Inventory must land before p
 | Websockets | 2s polling is enough at demo scale |
 | Inventory / recipes | Needs menu + order models stable first |
 | Procurement, HRMS, payroll, finance | Each is a full product |
-| QR ordering, CRM, reservations, AI | Depend on settled Order model |
+| CRM, reservations, AI | Depend on settled Order model |
+| Delivery aggregators | External partner APIs |

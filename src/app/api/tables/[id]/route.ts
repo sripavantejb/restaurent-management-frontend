@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { Table } from "@/models/Table";
 import { Order } from "@/models/Order";
+import { TableSession } from "@/models/TableSession";
+import { ServiceRequest } from "@/models/ServiceRequest";
 import { withAuth, json, error, getParams } from "@/lib/api";
 
 const UpdateSchema = z.object({
@@ -35,17 +37,46 @@ export const PATCH = withAuth(async ({ req, tenant }) => {
       }
     }
 
+    const setDoc: Record<string, unknown> = { ...body };
+    if (body.status === "FREE") {
+      setDoc.currentSessionId = null;
+    }
+
     const table = await Table.findOneAndUpdate(
       {
         _id: id,
         restaurantId: tenant.restaurantId,
         branchId: tenant.branchId,
       },
-      { $set: body },
+      { $set: setDoc },
       { new: true }
     );
 
     if (!table) return error("Table not found", 404);
+
+    // Freeing a table also closes any open QR session so guests can start fresh
+    if (body.status === "FREE") {
+      const openSessions = await TableSession.find({
+        restaurantId: tenant.restaurantId,
+        branchId: tenant.branchId,
+        tableIds: table._id,
+        status: { $in: ["OPEN", "BILL_REQUESTED", "BILLED"] },
+      });
+      for (const session of openSessions) {
+        session.status = "CLOSED";
+        session.closedAt = new Date();
+        await session.save();
+        await ServiceRequest.updateMany(
+          {
+            restaurantId: tenant.restaurantId,
+            branchId: tenant.branchId,
+            sessionId: session._id,
+            status: { $in: ["OPEN", "ACKNOWLEDGED"] },
+          },
+          { $set: { status: "DONE" } }
+        );
+      }
+    }
 
     return json({
       id: table._id.toString(),
@@ -55,6 +86,7 @@ export const PATCH = withAuth(async ({ req, tenant }) => {
       x: table.x,
       y: table.y,
       status: table.status,
+      currentSessionId: table.currentSessionId?.toString() ?? null,
     });
   } catch (err) {
     if (err instanceof z.ZodError) {

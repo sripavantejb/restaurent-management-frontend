@@ -10,7 +10,9 @@
     "seed": "node --experimental-strip-types --experimental-transform-types scripts/seed.ts"
   },
   "dependencies": {
+    "@gsap/react": "^2.1.2",
     "bcryptjs": "^3.0.2",
+    "gsap": "^3.15.0",
     "jose": "^6.0.11",
     "lucide-react": "^0.511.0",
     "mongoose": "^8.14.3",

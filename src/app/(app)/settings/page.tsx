@@ -143,8 +143,8 @@ export default function SettingsPage() {
           <div className="max-w-xl">
             <h2 className="text-base font-semibold">Staff approval for QR orders</h2>
             <p className="mt-1 text-sm text-[var(--muted)]">
-              When on, guest rounds wait for POS approval before the kitchen sees
-              them.
+              When on, guest rounds wait in the Orders approval queue before the
+              kitchen sees them.
             </p>
           </div>
           <button

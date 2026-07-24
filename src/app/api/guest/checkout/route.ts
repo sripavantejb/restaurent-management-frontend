@@ -54,6 +54,7 @@ export const GET = withGuest(async () => {
       orderNumber: o.orderNumber,
       roundNumber: o.roundNumber,
       status: o.status,
+      approvalStatus: o.approvalStatus ?? "NONE",
       placedBy: o.placedBy,
       items: o.items,
       subtotal: o.subtotal,

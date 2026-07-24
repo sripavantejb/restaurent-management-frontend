@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { Table, type ITable } from "@/models/Table";
 import { Order, type IOrder } from "@/models/Order";
+import { TableSession, type ITableSession } from "@/models/TableSession";
 import { withAuth, json, error } from "@/lib/api";
 
 type ActiveOrder = Pick<IOrder, "_id" | "orderNumber" | "tableId" | "status" | "total">;
@@ -50,9 +51,32 @@ export const GET = withAuth(async ({ tenant }) => {
       .map((o) => [o.tableId!.toString(), o])
   );
 
+  const openSessions = (await TableSession.find({
+    restaurantId: tenant.restaurantId,
+    branchId: tenant.branchId,
+    status: { $in: ["OPEN", "BILL_REQUESTED", "BILLED"] },
+  })
+    .select("_id sessionNumber status tableIds guestCount rounds total dueAmount")
+    .lean()) as unknown as Pick<
+    ITableSession,
+    "_id" | "sessionNumber" | "status" | "tableIds" | "guestCount" | "rounds" | "total" | "dueAmount"
+  >[];
+
+  const sessionByTable = new Map<string, (typeof openSessions)[0]>();
+  for (const s of openSessions) {
+    for (const tid of s.tableIds) {
+      sessionByTable.set(tid.toString(), s);
+    }
+  }
+
   return json({
     tables: tables.map((t) => {
       const order = orderByTable.get(t._id.toString());
+      const session =
+        (t.currentSessionId &&
+          openSessions.find((s) => s._id.toString() === t.currentSessionId?.toString())) ||
+        sessionByTable.get(t._id.toString()) ||
+        null;
       return {
         id: t._id.toString(),
         number: t.number,
@@ -61,6 +85,18 @@ export const GET = withAuth(async ({ tenant }) => {
         x: t.x,
         y: t.y,
         status: t.status,
+        currentSessionId: t.currentSessionId?.toString() ?? null,
+        currentSession: session
+          ? {
+              id: session._id.toString(),
+              sessionNumber: session.sessionNumber,
+              status: session.status,
+              guestCount: session.guestCount,
+              rounds: session.rounds,
+              total: session.total,
+              dueAmount: session.dueAmount,
+            }
+          : null,
         currentOrder: order
           ? {
               id: order._id.toString(),

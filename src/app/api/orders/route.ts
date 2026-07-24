@@ -40,6 +40,8 @@ export const GET = withAuth(async ({ req, tenant }) => {
   const type = url.searchParams.get("type");
   const from = url.searchParams.get("from");
   const to = url.searchParams.get("to");
+  const approvalStatus = url.searchParams.get("approvalStatus");
+  const placedBy = url.searchParams.get("placedBy");
 
   const filter: Record<string, unknown> = {
     restaurantId: tenant.restaurantId,
@@ -48,10 +50,15 @@ export const GET = withAuth(async ({ req, tenant }) => {
 
   if (status === "active") {
     filter.status = { $in: ["PLACED", "PREPARING", "READY", "SERVED"] };
+  } else if (status === "pending_approval") {
+    filter.status = "DRAFT";
+    filter.approvalStatus = "PENDING";
   } else if (status) {
     filter.status = status;
   }
 
+  if (approvalStatus) filter.approvalStatus = approvalStatus;
+  if (placedBy) filter.placedBy = placedBy;
   if (type) filter.type = type;
   if (from || to) {
     filter.placedAt = {};
@@ -60,7 +67,7 @@ export const GET = withAuth(async ({ req, tenant }) => {
   }
 
   const orders = (await Order.find(filter)
-    .sort({ placedAt: -1 })
+    .sort({ placedAt: -1, createdAt: -1 })
     .limit(200)
     .lean()) as unknown as IOrder[];
 
@@ -73,6 +80,7 @@ export const GET = withAuth(async ({ req, tenant }) => {
       sessionId: o.sessionId?.toString() ?? null,
       roundNumber: o.roundNumber ?? null,
       placedBy: o.placedBy ?? "STAFF",
+      approvalStatus: o.approvalStatus ?? "NONE",
       status: o.status,
       items: o.items.map((it: IOrderItem) => ({
         id: it._id?.toString(),
@@ -84,6 +92,7 @@ export const GET = withAuth(async ({ req, tenant }) => {
         addons: it.addons,
         notes: it.notes,
         status: it.status,
+        guestLabel: it.guestLabel ?? "",
       })),
       subtotal: o.subtotal,
       discountAmount: o.discountAmount,
@@ -93,6 +102,7 @@ export const GET = withAuth(async ({ req, tenant }) => {
       readyAt: o.readyAt,
       servedAt: o.servedAt,
       completedAt: o.completedAt,
+      createdAt: (o as IOrder & { createdAt?: Date }).createdAt ?? null,
     })),
   });
 }, "orders.view");

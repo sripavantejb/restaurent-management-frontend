@@ -11,6 +11,7 @@ import { apiFetch, useAuth } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import { ServiceRequestInbox } from "@/components/ServiceRequestInbox";
 import { formatMoney } from "@/lib/money";
 
 interface TableRow {
@@ -21,6 +22,16 @@ interface TableRow {
   x: number;
   y: number;
   status: string;
+  currentSessionId?: string | null;
+  currentSession: {
+    id: string;
+    sessionNumber: string;
+    status: string;
+    guestCount: number;
+    rounds: number;
+    total: number;
+    dueAmount: number;
+  } | null;
   currentOrder: {
     id: string;
     orderNumber: string;
@@ -41,6 +52,7 @@ const SHAPES = ["SQUARE", "ROUND", "RECT"] as const;
 export default function TablesPage() {
   const { activeBranchId, hasPermission } = useAuth();
   const canEdit = hasPermission("tables.update");
+  const canManageSessions = hasPermission("sessions.manage");
 
   const [tables, setTables] = useState<TableRow[]>([]);
   const [selected, setSelected] = useState<TableRow | null>(null);
@@ -224,6 +236,24 @@ export default function TablesPage() {
     }
   }
 
+  async function sessionAction(sessionId: string, action: "REOPEN" | "CLOSE") {
+    setBusy(true);
+    try {
+      await apiFetch(`/api/sessions/${sessionId}`, {
+        method: "PATCH",
+        branchId: activeBranchId,
+        body: JSON.stringify({ action }),
+      });
+      showToast(action === "REOPEN" ? "Table reopened for ordering" : "Session closed");
+      setSelected(null);
+      await load(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Session action failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function autoGrid() {
     const sorted = [...tables].sort((a, b) => a.number - b.number);
     const next = sorted.map((t, i) => {
@@ -390,7 +420,7 @@ export default function TablesPage() {
         </p>
       ) : null}
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_280px]">
+      <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_300px]">
         <div
           className="overflow-auto rounded-[6px] border border-[var(--border)] bg-[var(--surface-2)] p-4"
           onPointerMove={onPointerMove}
@@ -428,13 +458,18 @@ export default function TablesPage() {
                     width: t.shape === "RECT" ? 100 : 80,
                     height: t.shape === "RECT" ? 64 : 80,
                     borderRadius: t.shape === "ROUND" ? 999 : 6,
-                    borderColor: STATUS_COLOR[t.status],
+                    borderColor:
+                      t.currentSession?.status === "BILL_REQUESTED"
+                        ? "#3B82F6"
+                        : STATUS_COLOR[t.status],
                     touchAction: editMode ? "none" : undefined,
                   }}
                 >
                   <span className="num text-lg">T{t.number}</span>
                   <span className="text-[10px] text-[var(--muted)]">
-                    {t.capacity}p
+                    {t.currentSession?.status === "BILL_REQUESTED"
+                      ? "BILL"
+                      : `${t.capacity}p`}
                   </span>
                 </button>
               ))}
@@ -442,49 +477,53 @@ export default function TablesPage() {
           )}
         </div>
 
-        <div className="rounded-[6px] border border-[var(--border)] bg-white">
-          <div className="border-b border-[var(--border)] px-3 py-2 text-xs font-semibold tracking-wide text-[var(--muted)] uppercase">
-            Tables · {tables.length}
-          </div>
-          <ul className="max-h-[480px] overflow-auto">
-            {listSorted.map((t) => (
-              <li
-                key={t.id}
-                className="flex items-center gap-2 border-b border-[var(--border)] px-3 py-2 text-sm"
-              >
-                <button
-                  type="button"
-                  className="min-w-0 flex-1 text-left hover:text-[var(--accent)]"
-                  onClick={() => openEdit(t)}
+        <div className="space-y-4">
+          <ServiceRequestInbox />
+
+          <div className="rounded-[6px] border border-[var(--border)] bg-white">
+            <div className="border-b border-[var(--border)] px-3 py-2 text-xs font-semibold tracking-wide text-[var(--muted)] uppercase">
+              Tables · {tables.length}
+            </div>
+            <ul className="max-h-[320px] overflow-auto">
+              {listSorted.map((t) => (
+                <li
+                  key={t.id}
+                  className="flex items-center gap-2 border-b border-[var(--border)] px-3 py-2 text-sm"
                 >
-                  <span className="num font-medium">T{t.number}</span>
-                  <span className="ml-2 text-xs text-[var(--muted)]">
-                    {t.capacity}p · {t.status}
-                  </span>
-                </button>
-                {editMode && canEdit ? (
-                  <div className="flex gap-1">
-                    <button
-                      type="button"
-                      className="h-8 w-8 rounded-[6px] border border-[var(--border)] text-xs"
-                      aria-label="Move number up"
-                      onClick={() => moveNumber(t.id, -1)}
-                    >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
-                      className="h-8 w-8 rounded-[6px] border border-[var(--border)] text-xs"
-                      aria-label="Move number down"
-                      onClick={() => moveNumber(t.id, 1)}
-                    >
-                      ↓
-                    </button>
-                  </div>
-                ) : null}
-              </li>
-            ))}
-          </ul>
+                  <button
+                    type="button"
+                    className="min-w-0 flex-1 text-left hover:text-[var(--accent)]"
+                    onClick={() => openEdit(t)}
+                  >
+                    <span className="num font-medium">T{t.number}</span>
+                    <span className="ml-2 text-xs text-[var(--muted)]">
+                      {t.capacity}p · {t.currentSession?.status ?? t.status}
+                    </span>
+                  </button>
+                  {editMode && canEdit ? (
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        className="h-8 w-8 rounded-[6px] border border-[var(--border)] text-xs"
+                        aria-label="Move number up"
+                        onClick={() => moveNumber(t.id, -1)}
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        className="h-8 w-8 rounded-[6px] border border-[var(--border)] text-xs"
+                        aria-label="Move number down"
+                        onClick={() => moveNumber(t.id, 1)}
+                      >
+                        ↓
+                      </button>
+                    </div>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       </div>
 
@@ -622,6 +661,56 @@ export default function TablesPage() {
               </>
             )}
 
+            {selected.currentSession ? (
+              <div className="rounded-[6px] border border-[var(--border)] p-3">
+                <p className="text-xs text-[var(--muted)] uppercase tracking-wide">
+                  QR session
+                </p>
+                <p className="num font-semibold">
+                  {selected.currentSession.sessionNumber}
+                </p>
+                <p className="text-[var(--muted)]">
+                  {selected.currentSession.status} ·{" "}
+                  {selected.currentSession.guestCount} guests ·{" "}
+                  {selected.currentSession.rounds} rounds
+                </p>
+                <p className="num mt-1 text-lg">
+                  {formatMoney(selected.currentSession.total)}
+                  {selected.currentSession.dueAmount > 0 ? (
+                    <span className="ml-2 text-sm text-[var(--accent)]">
+                      due {formatMoney(selected.currentSession.dueAmount)}
+                    </span>
+                  ) : null}
+                </p>
+                {canManageSessions ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {selected.currentSession.status === "BILL_REQUESTED" ||
+                    selected.currentSession.status === "BILLED" ? (
+                      <Button
+                        size="sm"
+                        disabled={busy}
+                        onClick={() =>
+                          void sessionAction(selected.currentSession!.id, "REOPEN")
+                        }
+                      >
+                        Reopen for ordering
+                      </Button>
+                    ) : null}
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={busy}
+                      onClick={() =>
+                        void sessionAction(selected.currentSession!.id, "CLOSE")
+                      }
+                    >
+                      Close & free table
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
             {selected.currentOrder ? (
               <div className="rounded-[6px] border border-[var(--border)] p-3">
                 <p className="num font-semibold">
@@ -634,11 +723,11 @@ export default function TablesPage() {
                   {formatMoney(selected.currentOrder.total)}
                 </p>
               </div>
-            ) : (
+            ) : !selected.currentSession ? (
               <p className="text-[var(--muted)]">
-                No open order. Seat guests from POS and send to kitchen.
+                No open order. Seat guests from POS or let them scan the table QR.
               </p>
-            )}
+            ) : null}
 
             {canEdit ? (
               <div className="flex gap-2 pt-1">
