@@ -27,6 +27,19 @@ const RealtimeContext = createContext<RealtimeState>({
   socket: null,
 });
 
+/** Vercel serverless cannot host Engine.IO / WebSockets. */
+function realtimeSupported(): boolean {
+  if (typeof window === "undefined") return false;
+  if (process.env.NEXT_PUBLIC_ENABLE_SOCKETIO === "0") return false;
+  if (process.env.NEXT_PUBLIC_ENABLE_SOCKETIO === "1") return true;
+  const host = window.location.hostname;
+  if (host === "localhost" || host === "127.0.0.1") return true;
+  if (host.endsWith(".vercel.app")) return false;
+  if (process.env.NEXT_PUBLIC_VERCEL_ENV) return false;
+  // Self-hosted / custom domain: opt in via env
+  return process.env.NEXT_PUBLIC_ENABLE_SOCKETIO === "1";
+}
+
 export function RealtimeProvider({ children }: { children: ReactNode }) {
   const { user, restaurant, activeBranchId } = useAuth();
   const [socket, setSocket] = useState<SocketLike | null>(null);
@@ -34,6 +47,8 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!user || !restaurant || !activeBranchId) return;
+    if (!realtimeSupported()) return;
+
     let cancelled = false;
     let s: SocketLike | null = null;
 
@@ -45,6 +60,9 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           path: "/api/socketio",
           transports: ["websocket", "polling"],
           autoConnect: true,
+          reconnection: true,
+          reconnectionAttempts: 3,
+          reconnectionDelay: 2000,
         });
         s = client as unknown as SocketLike;
         client.on("connect", () => {
@@ -55,9 +73,13 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           });
         });
         client.on("disconnect", () => setConnected(false));
+        client.on("connect_error", () => {
+          /* avoid noisy retries when custom server is down */
+          setConnected(false);
+        });
         setSocket(s);
       } catch {
-        /* Socket.IO optional — polling remains */
+        /* Socket.IO optional */
       }
     })();
 
