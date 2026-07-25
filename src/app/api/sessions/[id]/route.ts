@@ -118,7 +118,7 @@ export const PATCH = withAuth(async ({ req, tenant }) => {
           _id: { $in: session.tableIds },
         },
         {
-          $set: { status: "FREE", currentSessionId: null },
+          $set: { status: "AVAILABLE", currentSessionId: null },
         }
       );
 

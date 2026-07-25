@@ -234,6 +234,26 @@ export default function GuestTableClient({
     setCfgQty(1);
   }
 
+  function decSimple(item: MenuItem) {
+    setCart((prev) => {
+      const idx = prev.findIndex(
+        (l) =>
+          l.menuItemId === item.id &&
+          !l.variant &&
+          !l.notes &&
+          l.addons.length === 0
+      );
+      if (idx < 0) return prev;
+      const next = [...prev];
+      if (next[idx].qty <= 1) {
+        next.splice(idx, 1);
+        return next;
+      }
+      next[idx] = { ...next[idx], qty: next[idx].qty - 1 };
+      return next;
+    });
+  }
+
   function addToCart(
     item: MenuItem,
     variant: string,
@@ -278,6 +298,28 @@ export default function GuestTableClient({
     [cart]
   );
   const cartQty = useMemo(() => cart.reduce((s, l) => s + l.qty, 0), [cart]);
+  const qtyByItemId = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const l of cart) {
+      map[l.menuItemId] = (map[l.menuItemId] ?? 0) + l.qty;
+    }
+    return map;
+  }, [cart]);
+
+  const kitchenHint = useMemo(() => {
+    const roundsList = checkout?.rounds ?? [];
+    if (!roundsList.length) return "";
+    let cooking = 0;
+    let ready = 0;
+    for (const r of roundsList) {
+      const s = r.status.toUpperCase();
+      if (s === "PREPARING") cooking += 1;
+      if (s === "READY") ready += 1;
+    }
+    if (ready) return `${ready} ready`;
+    if (cooking) return `${cooking} cooking`;
+    return "kitchen live";
+  }, [checkout?.rounds]);
 
   async function placeOrder() {
     if (!cart.length || placingRef.current) return;
@@ -556,8 +598,11 @@ export default function GuestTableClient({
               activeCat={activeCat}
               items={filteredItems}
               currency={currency}
+              qtyByItemId={qtyByItemId}
               onCategory={setActiveCat}
               onOpenItem={openConfig}
+              onIncSimple={(it) => addToCart(it, "", [], "", 1)}
+              onDecSimple={decSimple}
             />
           ) : null}
 
@@ -589,11 +634,10 @@ export default function GuestTableClient({
             sessionTotal={sessionTotal}
             currency={currency}
             cartQty={cartQty}
+            kitchenHint={kitchenHint}
             onTrack={() => setPhase("track")}
             onMenu={() => setPhase("menu")}
-            onCart={() =>
-              cartQty ? setShowCart(true) : showToast("Add items first")
-            }
+            onCart={() => setShowCart(true)}
           />
         </>
       ) : null}
@@ -643,6 +687,13 @@ export default function GuestTableClient({
                 .filter((x) => x.qty > 0)
             )
           }
+          onRemove={(index) =>
+            setCart((prev) => prev.filter((_, j) => j !== index))
+          }
+          onClear={() => {
+            setCart([]);
+            showToast("Cart cleared");
+          }}
           onPlace={() => void placeOrder()}
         />
       ) : null}

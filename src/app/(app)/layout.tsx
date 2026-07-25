@@ -5,6 +5,8 @@ import { Menu } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import { Sidebar } from "@/components/Sidebar";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { NotificationBell } from "@/components/NotificationBell";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { loading, user, restaurant } = useAuth();
@@ -44,10 +46,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           >
             <Menu size={20} />
           </button>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold">{restaurant?.name ?? "RestaurantOS"}</p>
             <p className="truncate text-[11px] text-[var(--muted)]">Staff console</p>
           </div>
+          <NotificationBell />
+          <ThemeToggle />
         </header>
         <main className="min-h-0 min-w-0 flex-1 overflow-auto">{children}</main>
       </div>

@@ -58,6 +58,12 @@ export const POST = withAuth(async ({ req, tenant }) => {
       return error("Email already in use", 409, "Pick a different login email.");
     }
 
+    const { assertWithinLimit } = await import("@/lib/billing/limits");
+    const limit = await assertWithinLimit(tenant.restaurantId, "staff");
+    if (!limit.ok) {
+      return error(limit.message, 403, limit.hint);
+    }
+
     const user = await User.create({
       restaurantId: tenant.restaurantId,
       branchId: body.branchId || tenant.branchId,

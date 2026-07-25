@@ -30,6 +30,7 @@ export default function RegisterRestaurantPage() {
   const [contactEmail, setContactEmail] = useState("");
   const [contactPhone, setContactPhone] = useState("");
   const [status, setStatus] = useState("ACTIVE");
+  const [plan, setPlan] = useState("STARTER");
   const [branchName, setBranchName] = useState("Main");
   const [branchCode, setBranchCode] = useState("B1");
   const [ownerName, setOwnerName] = useState("");
@@ -56,6 +57,7 @@ export default function RegisterRestaurantPage() {
           contactEmail,
           contactPhone,
           status,
+          plan,
           branchName,
           branchCode,
           ownerName,
@@ -71,7 +73,7 @@ export default function RegisterRestaurantPage() {
   }
 
   return (
-    <div className="p-6 md:p-8">
+    <div className="p-4 sm:p-6 md:p-8">
       <div className="mb-6">
         <Link
           href="/admin/restaurants"
@@ -144,6 +146,20 @@ export default function RegisterRestaurantPage() {
               </select>
             </label>
           </div>
+          <label className="block text-xs font-medium text-[var(--muted)]">
+            Plan
+            <select
+              className="mt-1 h-10 w-full rounded-[6px] border border-[var(--border)] bg-white px-3 text-sm"
+              value={plan}
+              onChange={(e) => setPlan(e.target.value)}
+            >
+              <option value="STARTER">Starter · ₹1,999/mo · 14-day trial</option>
+              <option value="GROWTH">Growth · ₹4,999/mo · 14-day trial</option>
+              <option value="ENTERPRISE">
+                Enterprise · ₹12,999/mo · 14-day trial
+              </option>
+            </select>
+          </label>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block text-xs font-medium text-[var(--muted)]">
               Contact email

@@ -7,13 +7,20 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
-import { RESTAURANT_STATUS_LABEL, label } from "@/lib/labels";
+import {
+  RESTAURANT_STATUS_LABEL,
+  PLAN_LABEL,
+  BILLING_STATUS_LABEL,
+  label,
+} from "@/lib/labels";
 
 interface RestaurantRow {
   id: string;
   name: string;
   slug: string;
   status: string;
+  plan: string;
+  billingStatus: string;
   address: string;
   branchCount: number;
   contactEmail: string;
@@ -25,6 +32,15 @@ function statusTone(status: string): "success" | "warn" | "danger" | "neutral" {
   if (status === "ACTIVE") return "success";
   if (status === "PENDING") return "warn";
   if (status === "SUSPENDED") return "danger";
+  return "neutral";
+}
+
+function billingTone(
+  status: string
+): "success" | "warn" | "danger" | "neutral" {
+  if (status === "ACTIVE") return "success";
+  if (status === "TRIAL") return "warn";
+  if (status === "PAST_DUE" || status === "CANCELLED") return "danger";
   return "neutral";
 }
 
@@ -59,7 +75,7 @@ export default function RestaurantsListPage() {
   }, [load]);
 
   return (
-    <div className="p-6 md:p-8">
+    <div className="p-4 sm:p-6 md:p-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-[var(--ink)]">
@@ -106,12 +122,54 @@ export default function RestaurantsListPage() {
         </p>
       ) : null}
 
-      <Card className="mt-4 overflow-hidden">
+      <div className="mt-4 space-y-2 sm:hidden">
+        {loading ? (
+          <p className="rounded-[6px] border border-[var(--border)] bg-white px-4 py-8 text-center text-[var(--muted)]">
+            Loading…
+          </p>
+        ) : rows.length === 0 ? (
+          <p className="rounded-[6px] border border-[var(--border)] bg-white px-4 py-8 text-center text-[var(--muted)]">
+            No restaurants match this filter.
+          </p>
+        ) : (
+          rows.map((r) => (
+            <Link
+              key={r.id}
+              href={`/admin/restaurants/${r.id}`}
+              className="block rounded-[6px] border border-[var(--border)] bg-white p-4"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-[var(--ink)]">{r.name}</p>
+                  <p className="text-xs text-[var(--muted)]">{r.slug}</p>
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  <Badge tone={statusTone(r.status)}>
+                    {label(RESTAURANT_STATUS_LABEL, r.status)}
+                  </Badge>
+                  <Badge tone={billingTone(r.billingStatus)}>
+                    {label(BILLING_STATUS_LABEL, r.billingStatus)}
+                  </Badge>
+                </div>
+              </div>
+              <p className="mt-2 text-sm text-[var(--muted)]">
+                {label(PLAN_LABEL, r.plan)} · {r.branchCount} branch
+                {r.branchCount === 1 ? "" : "es"}
+                {r.contactEmail ? ` · ${r.contactEmail}` : ""}
+              </p>
+            </Link>
+          ))
+        )}
+      </div>
+
+      <Card className="mt-4 hidden overflow-hidden sm:block">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-[var(--border)] bg-[var(--surface-2)] text-xs uppercase tracking-wide text-[var(--muted)]">
             <tr>
               <th className="px-4 py-3 font-medium">Restaurant</th>
               <th className="px-4 py-3 font-medium">Status</th>
+              <th className="px-4 py-3 font-medium">Plan</th>
+              <th className="px-4 py-3 font-medium">Billing</th>
               <th className="px-4 py-3 font-medium">Branches</th>
               <th className="px-4 py-3 font-medium">Contact</th>
               <th className="px-4 py-3 font-medium">Registered</th>
@@ -120,13 +178,13 @@ export default function RestaurantsListPage() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-[var(--muted)]">
+                <td colSpan={7} className="px-4 py-8 text-center text-[var(--muted)]">
                   Loading…
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-[var(--muted)]">
+                <td colSpan={7} className="px-4 py-8 text-center text-[var(--muted)]">
                   No restaurants match this filter.
                 </td>
               </tr>
@@ -145,6 +203,14 @@ export default function RestaurantsListPage() {
                   <td className="px-4 py-3">
                     <Badge tone={statusTone(r.status)}>
                       {label(RESTAURANT_STATUS_LABEL, r.status)}
+                    </Badge>
+                  </td>
+                  <td className="px-4 py-3">
+                    {label(PLAN_LABEL, r.plan)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <Badge tone={billingTone(r.billingStatus)}>
+                      {label(BILLING_STATUS_LABEL, r.billingStatus)}
                     </Badge>
                   </td>
                   <td className="px-4 py-3 num">{r.branchCount}</td>

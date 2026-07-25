@@ -5,6 +5,7 @@ import { slugify } from "@/lib/platform-auth";
 import { Restaurant, RESTAURANT_STATUSES } from "@/models/Restaurant";
 import { Branch } from "@/models/Branch";
 import { User } from "@/models/User";
+import { PLANS, defaultTrialEndsAt } from "@/lib/billing/plans";
 
 const RegisterSchema = z.object({
   name: z.string().min(2).max(120),
@@ -21,6 +22,7 @@ const RegisterSchema = z.object({
     }),
   contactPhone: z.string().max(32).optional().default(""),
   status: z.enum(RESTAURANT_STATUSES).optional().default("ACTIVE"),
+  plan: z.enum(PLANS).optional().default("STARTER"),
   branchName: z.string().min(1).max(120).default("Main"),
   branchCode: z.string().min(1).max(16).default("B1"),
   ownerName: z.string().min(2).max(120),
@@ -51,12 +53,15 @@ export const GET = withPlatformAuth(async ({ req }) => {
     );
   }
 
-  const [total, active, pending, suspended] = await Promise.all([
-    Restaurant.countDocuments(),
-    Restaurant.countDocuments({ status: "ACTIVE" }),
-    Restaurant.countDocuments({ status: "PENDING" }),
-    Restaurant.countDocuments({ status: "SUSPENDED" }),
-  ]);
+  const [total, active, pending, suspended, trial, billingActive] =
+    await Promise.all([
+      Restaurant.countDocuments(),
+      Restaurant.countDocuments({ status: "ACTIVE" }),
+      Restaurant.countDocuments({ status: "PENDING" }),
+      Restaurant.countDocuments({ status: "SUSPENDED" }),
+      Restaurant.countDocuments({ billingStatus: "TRIAL" }),
+      Restaurant.countDocuments({ billingStatus: "ACTIVE" }),
+    ]);
 
   const ids = restaurants.map((r) => r._id);
   const branchCounts = await Branch.aggregate<{
@@ -68,12 +73,21 @@ export const GET = withPlatformAuth(async ({ req }) => {
   );
 
   return json({
-    counts: { total, active, pending, suspended },
+    counts: {
+      total,
+      active,
+      pending,
+      suspended,
+      trial,
+      billingActive,
+    },
     restaurants: restaurants.map((r) => ({
       id: r._id.toString(),
       name: r.name,
       slug: r.slug,
       status: r.status ?? "ACTIVE",
+      plan: r.plan ?? "STARTER",
+      billingStatus: r.billingStatus ?? "TRIAL",
       address: r.address,
       contactEmail: r.contactEmail || "",
       contactPhone: r.contactPhone || "",
@@ -120,6 +134,9 @@ export const POST = withPlatformAuth(async ({ req }) => {
     name: body.name.trim(),
     slug,
     status: body.status,
+    plan: body.plan,
+    billingStatus: "TRIAL",
+    trialEndsAt: defaultTrialEndsAt(),
     address: body.address,
     gstNumber: body.gstNumber,
     contactEmail: body.contactEmail || ownerEmail,
@@ -154,6 +171,9 @@ export const POST = withPlatformAuth(async ({ req }) => {
         name: restaurant.name,
         slug: restaurant.slug,
         status: restaurant.status,
+        plan: restaurant.plan,
+        billingStatus: restaurant.billingStatus,
+        trialEndsAt: restaurant.trialEndsAt,
       },
       branch: {
         id: branch._id.toString(),

@@ -132,6 +132,9 @@ export const POST = withAuth(async ({ req, tenant }) => {
     if (!order.servedAt) order.servedAt = new Date();
     await order.save();
 
+    const { deductInventoryForOrder } = await import("@/lib/inventory");
+    await deductInventoryForOrder(order);
+
     if (order.sessionId) {
       await recomputeSessionTotals(order.sessionId);
       const session = await TableSession.findById(order.sessionId);
@@ -148,7 +151,7 @@ export const POST = withAuth(async ({ req, tenant }) => {
           restaurantId: tenant.restaurantId,
           branchId: tenant.branchId,
         },
-        { $set: { status: "FREE", currentSessionId: null } }
+        { $set: { status: "CLEANING", currentSessionId: null } }
       );
     }
 

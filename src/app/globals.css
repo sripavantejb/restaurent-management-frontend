@@ -16,6 +16,18 @@
   --font-num: "Space Grotesk", system-ui, sans-serif;
 }
 
+html.dark {
+  --ink: #f3efe8;
+  --surface: #141210;
+  --surface-2: #1e1b18;
+  --accent: #ff6b3d;
+  --success: #3dbeb0;
+  --warn: #e9c46a;
+  --muted: #a39b92;
+  --border: #2e2a26;
+  --kds-bg: #0c0b0a;
+}
+
 html,
 body {
   height: 100%;

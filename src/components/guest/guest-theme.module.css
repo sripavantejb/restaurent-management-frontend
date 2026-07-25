@@ -117,6 +117,10 @@
   padding: 0 14px;
   cursor: pointer;
   font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
 }
 
 .btnGhostBlock {
@@ -239,7 +243,8 @@
 
 .catRail {
   position: sticky;
-  top: 108px;
+  /* Sit just under the sticky guest header (stacks taller on narrow screens). */
+  top: 5.75rem;
   z-index: 15;
   display: flex;
   gap: 8px;
@@ -250,6 +255,12 @@
   border-bottom: 1px solid var(--g-border);
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
+}
+
+@media (min-width: 480px) {
+  .catRail {
+    top: 4.5rem;
+  }
 }
 
 .catRail::-webkit-scrollbar {
@@ -292,7 +303,6 @@
   border-radius: 14px;
   border: 1px solid var(--g-border);
   background: var(--g-panel);
-  cursor: pointer;
   color: var(--g-ink);
   font-family: inherit;
   width: 100%;
@@ -300,18 +310,8 @@
   transition: border-color 0.15s ease, transform 0.15s ease;
 }
 
-.menuItem:hover:not(:disabled) {
+.menuItem:hover {
   border-color: rgba(232, 145, 12, 0.45);
-}
-
-.menuItem:active:not(:disabled) {
-  transform: scale(0.99);
-}
-
-.menuItem:disabled {
-  opacity: 0.72;
-  cursor: not-allowed;
-  background: var(--g-surface-2);
 }
 
 .menuItemBody {
@@ -376,6 +376,289 @@
   opacity: 0.4;
   box-shadow: none;
   cursor: not-allowed;
+}
+
+.menuAddDisabled {
+  opacity: 0.4;
+  box-shadow: none;
+  pointer-events: none;
+}
+
+.menuItemDisabled {
+  opacity: 0.55;
+}
+
+.menuItemBodyBtn {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.menuItemBodyBtn:disabled {
+  cursor: not-allowed;
+}
+
+.menuQtyControl {
+  align-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 40px;
+  padding: 0 4px;
+  border-radius: 12px;
+  border: 1px solid var(--g-border);
+  background: var(--g-panel);
+  flex-shrink: 0;
+}
+
+.menuQtyBtn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--g-ink);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.menuQtyBtn:active {
+  background: var(--g-surface-2);
+}
+
+.cartHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.cartToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.cartList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.cartEmpty {
+  padding: 18px 4px 8px;
+  text-align: left;
+}
+
+.cartLineMain {
+  flex: 1;
+  min-width: 0;
+}
+
+.cartLineTop {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.cartItemName {
+  font-weight: 600;
+  margin: 0;
+  line-height: 1.3;
+}
+
+.cartLinePrice {
+  font-weight: 700;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.cartNotes {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--g-muted);
+  font-style: italic;
+}
+
+.cartControls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.cartFooter {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--g-border);
+}
+
+.linkDanger {
+  border: none;
+  background: transparent;
+  color: #b45309;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 0;
+}
+
+.linkDanger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.badgeCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--g-ink);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--g-font-num);
+}
+
+.kdsSummary {
+  border: 1px solid var(--g-border);
+  border-radius: var(--g-radius);
+  background: var(--g-panel);
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+
+.kdsSummaryTitle {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--g-muted);
+}
+
+.kdsStats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  font-size: 12px;
+  color: var(--g-muted);
+}
+
+.kdsStats strong {
+  display: block;
+  font-size: 18px;
+  color: var(--g-ink);
+  line-height: 1.1;
+}
+
+.pipeline {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  margin: 14px 0 8px;
+}
+
+.pipelineStep {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  opacity: 0.4;
+}
+
+.pipelineDone {
+  opacity: 0.85;
+}
+
+.pipelineActive {
+  opacity: 1;
+}
+
+.pipelineDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--g-border);
+  box-shadow: 0 0 0 3px transparent;
+}
+
+.pipelineDone .pipelineDot {
+  background: var(--g-success);
+}
+
+.pipelineActive .pipelineDot {
+  background: var(--g-accent);
+  box-shadow: 0 0 0 3px rgba(232, 145, 12, 0.22);
+}
+
+.pipelineLabel {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--g-muted);
+  text-align: center;
+}
+
+.pipelineActive .pipelineLabel {
+  color: var(--g-ink);
+}
+
+.etaLine {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--g-ink);
+}
+
+.trackItem {
+  margin-top: 8px;
+}
+
+.trackItemMain {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.itemStatus {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.itemStatusQueued {
+  color: #1d4ed8;
+}
+
+.itemStatusCooking {
+  color: #c2410c;
+}
+
+.itemStatusReady {
+  color: var(--g-success);
 }
 
 .vegDot {
@@ -716,10 +999,8 @@
 }
 
 .cartLine {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 10px 0;
+  display: block;
+  padding: 12px 0;
   border-bottom: 1px solid var(--g-border);
 }
 

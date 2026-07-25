@@ -48,6 +48,7 @@ export default function OrdersPage() {
   } | null>(null);
   const [error, setError] = useState("");
   const [busyApprove, setBusyApprove] = useState(false);
+  const [approvalsOpen, setApprovalsOpen] = useState(true);
 
   const load = useCallback(async () => {
     if (!activeBranchId) return;
@@ -131,6 +132,32 @@ export default function OrdersPage() {
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_320px]">
         <div>
+          {/* Mobile approvals — sticky strip so queue is not buried */}
+          <div className="mb-3 lg:hidden">
+            <button
+              type="button"
+              onClick={() => setApprovalsOpen((o) => !o)}
+              className="flex w-full items-center justify-between rounded-[6px] border border-[var(--border)] bg-white px-3 py-2.5 text-sm font-medium"
+            >
+              <span>
+                Approvals
+                {pendingCount > 0 ? (
+                  <span className="ml-2 rounded-[6px] bg-[var(--warn)]/30 px-2 py-0.5 text-xs">
+                    {pendingCount}
+                  </span>
+                ) : null}
+              </span>
+              <span className="text-xs text-[var(--muted)]">
+                {approvalsOpen ? "Hide" : "Show"}
+              </span>
+            </button>
+            {approvalsOpen ? (
+              <div className="mt-2 rounded-[6px] border border-[var(--border)] bg-white p-2">
+                <ApprovalQueue tableNumbers={tableMap} />
+              </div>
+            ) : null}
+          </div>
+
           <div className="flex flex-wrap gap-2">
             <select
               className="h-10 rounded-[6px] border border-[var(--border)] bg-white px-2 text-sm"
@@ -187,7 +214,66 @@ export default function OrdersPage() {
             </p>
           ) : null}
 
-          <div className="mt-4 overflow-auto rounded-[6px] border border-[var(--border)] bg-white">
+          {/* Mobile cards */}
+          <div className="mt-4 space-y-2 sm:hidden">
+            {orders.length === 0 ? (
+              <p className="rounded-[6px] border border-[var(--border)] bg-white px-3 py-8 text-center text-sm text-[var(--muted)]">
+                No orders in this range. Place one from POS or widen the filters.
+              </p>
+            ) : (
+              orders.map((o) => (
+                <button
+                  key={o.id}
+                  type="button"
+                  onClick={() => void openDetail(o)}
+                  className="flex w-full flex-col gap-2 rounded-[6px] border border-[var(--border)] bg-white p-3 text-left"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="num font-semibold">
+                        {o.orderNumber}
+                        {o.tableId && tableMap[o.tableId] != null ? (
+                          <span className="ml-1 text-xs font-normal text-[var(--muted)]">
+                            T{tableMap[o.tableId]}
+                          </span>
+                        ) : null}
+                      </p>
+                      <p className="text-xs text-[var(--muted)]">
+                        {label(ORDER_TYPE_LABEL, o.type)}
+                        {o.placedBy === "GUEST" ? " · QR" : ""}
+                        {o.placedAt
+                          ? ` · ${new Date(o.placedAt).toLocaleString("en-IN", {
+                              day: "numeric",
+                              month: "short",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}`
+                          : ""}
+                      </p>
+                    </div>
+                    <p className="num shrink-0 font-semibold">{formatMoney(o.total)}</p>
+                  </div>
+                  <Badge
+                    tone={
+                      o.status === "COMPLETED"
+                        ? "success"
+                        : o.status === "CANCELLED"
+                          ? "danger"
+                          : o.status === "DRAFT"
+                            ? "warn"
+                            : "accent"
+                    }
+                  >
+                    {o.approvalStatus === "PENDING"
+                      ? label(APPROVAL_STATUS_LABEL, "PENDING")
+                      : label(ORDER_STATUS_LABEL, o.status)}
+                  </Badge>
+                </button>
+              ))
+            )}
+          </div>
+
+          <div className="mt-4 hidden overflow-auto rounded-[6px] border border-[var(--border)] bg-white sm:block">
             <table className="w-full text-left text-sm">
               <thead className="border-b border-[var(--border)] bg-[var(--surface-2)] text-xs text-[var(--muted)]">
                 <tr>
@@ -265,7 +351,9 @@ export default function OrdersPage() {
           </div>
         </div>
 
-        <ApprovalQueue tableNumbers={tableMap} />
+        <div className="hidden lg:block">
+          <ApprovalQueue tableNumbers={tableMap} />
+        </div>
       </div>
 
       <Modal

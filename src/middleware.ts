@@ -10,6 +10,8 @@ const PUBLIC_EXACT = [
   "/api/auth/login",
   "/admin/login",
   "/api/platform/auth/login",
+  "/api/billing/webhook",
+  "/api/billing/plans",
 ];
 const PUBLIC_PREFIX = ["/q/", "/t/", "/api/guest/", "/guest/"];
 

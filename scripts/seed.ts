@@ -117,6 +117,9 @@ async function main() {
         name: String,
         slug: String,
         status: String,
+        plan: String,
+        billingStatus: String,
+        trialEndsAt: Date,
         contactEmail: String,
         contactPhone: String,
         logoUrl: String,
@@ -294,6 +297,9 @@ async function main() {
     name: "Tiffinate",
     slug: "tiffinate",
     status: "ACTIVE",
+    plan: "GROWTH",
+    billingStatus: "ACTIVE",
+    trialEndsAt: null,
     contactEmail: "owner@demo.com",
     contactPhone: "",
     logoUrl: "",
@@ -405,6 +411,139 @@ async function main() {
 
   const itemsB1 = await seedMenu(b1._id);
   await seedMenu(b2._id);
+
+  // —— Inventory + recipes (B1) ——
+  const InventoryItem = mongoose.model(
+    "InventoryItem",
+    new mongoose.Schema(
+      {
+        restaurantId: mongoose.Schema.Types.ObjectId,
+        branchId: mongoose.Schema.Types.ObjectId,
+        name: String,
+        sku: String,
+        unit: String,
+        quantityOnHand: Number,
+        reorderLevel: Number,
+        costPerUnit: Number,
+        isActive: Boolean,
+      },
+      { timestamps: true }
+    )
+  );
+  const Recipe = mongoose.model(
+    "Recipe",
+    new mongoose.Schema(
+      {
+        restaurantId: mongoose.Schema.Types.ObjectId,
+        branchId: mongoose.Schema.Types.ObjectId,
+        menuItemId: mongoose.Schema.Types.ObjectId,
+        lines: [
+          {
+            inventoryItemId: mongoose.Schema.Types.ObjectId,
+            qtyPerServe: Number,
+          },
+        ],
+      },
+      { timestamps: true }
+    )
+  );
+
+  const stockDefs = [
+    { name: "Paneer", sku: "PN-01", unit: "KG", quantityOnHand: 12, reorderLevel: 3, costPerUnit: paise(420) },
+    { name: "Chicken", sku: "CK-01", unit: "KG", quantityOnHand: 20, reorderLevel: 5, costPerUnit: paise(280) },
+    { name: "Basmati rice", sku: "RC-01", unit: "KG", quantityOnHand: 40, reorderLevel: 10, costPerUnit: paise(120) },
+    { name: "Maida", sku: "FL-01", unit: "KG", quantityOnHand: 15, reorderLevel: 4, costPerUnit: paise(45) },
+    { name: "Butter", sku: "BT-01", unit: "KG", quantityOnHand: 8, reorderLevel: 2, costPerUnit: paise(550) },
+    { name: "Tomato puree", sku: "TM-01", unit: "L", quantityOnHand: 10, reorderLevel: 2, costPerUnit: paise(80) },
+    { name: "Cooking oil", sku: "OL-01", unit: "L", quantityOnHand: 18, reorderLevel: 4, costPerUnit: paise(160) },
+    { name: "Mint leaves", sku: "MT-01", unit: "KG", quantityOnHand: 1.5, reorderLevel: 0.5, costPerUnit: paise(200) },
+  ];
+
+  const stockB1 = await InventoryItem.insertMany(
+    stockDefs.map((s) => ({
+      ...s,
+      restaurantId: restaurant._id,
+      branchId: b1._id,
+      isActive: true,
+    }))
+  );
+  await InventoryItem.insertMany(
+    stockDefs.map((s) => ({
+      ...s,
+      restaurantId: restaurant._id,
+      branchId: b2._id,
+      isActive: true,
+    }))
+  );
+
+  const recipeLinks: { menu: string; lines: { inv: string; qty: number }[] }[] = [
+    {
+      menu: "Paneer Tikka",
+      lines: [
+        { inv: "Paneer", qty: 0.18 },
+        { inv: "Mint leaves", qty: 0.02 },
+        { inv: "Cooking oil", qty: 0.03 },
+      ],
+    },
+    {
+      menu: "Butter Chicken",
+      lines: [
+        { inv: "Chicken", qty: 0.25 },
+        { inv: "Butter", qty: 0.04 },
+        { inv: "Tomato puree", qty: 0.12 },
+      ],
+    },
+    {
+      menu: "Hyderabadi Chicken Biryani",
+      lines: [
+        { inv: "Chicken", qty: 0.3 },
+        { inv: "Basmati rice", qty: 0.2 },
+        { inv: "Cooking oil", qty: 0.04 },
+      ],
+    },
+    {
+      menu: "Butter Naan",
+      lines: [
+        { inv: "Maida", qty: 0.08 },
+        { inv: "Butter", qty: 0.015 },
+      ],
+    },
+    {
+      menu: "Paneer Butter Masala",
+      lines: [
+        { inv: "Paneer", qty: 0.2 },
+        { inv: "Butter", qty: 0.03 },
+        { inv: "Tomato puree", qty: 0.1 },
+      ],
+    },
+  ];
+
+  async function seedRecipes(branchId: mongoose.Types.ObjectId) {
+    const stock = await InventoryItem.find({
+      restaurantId: restaurant._id,
+      branchId,
+    });
+    const menu = await MenuItem.find({ restaurantId: restaurant._id, branchId });
+    const invId = (n: string) => stock.find((s) => s.name === n)!._id;
+    const menuId = (n: string) => menu.find((m) => m.name === n)!._id;
+    for (const r of recipeLinks) {
+      await Recipe.create({
+        restaurantId: restaurant._id,
+        branchId,
+        menuItemId: menuId(r.menu),
+        lines: r.lines.map((l) => ({
+          inventoryItemId: invId(l.inv),
+          qtyPerServe: l.qty,
+        })),
+      });
+    }
+  }
+
+  await seedRecipes(b1._id);
+  await seedRecipes(b2._id);
+
+  console.log("Inventory items on B1:", stockB1.length);
+  console.log("Recipes seeded per branch:", recipeLinks.length);
 
   const waiter = createdUsers.find((u) => u.role === "WAITER")!;
   const methods = ["CASH", "CARD", "UPI"] as const;

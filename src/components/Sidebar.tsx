@@ -14,10 +14,20 @@ import {
   LogOut,
   X,
   Users,
+  Package,
+  Sparkles,
+  CalendarDays,
+  Heart,
+  Wallet,
+  Megaphone,
+  UserCheck,
+  BarChart3,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import type { Permission } from "@/lib/rbac";
 import { ROLE_LABEL, label } from "@/lib/labels";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { NotificationBell } from "@/components/NotificationBell";
 
 const NAV: {
   href: string;
@@ -26,14 +36,22 @@ const NAV: {
   icon: typeof LayoutDashboard;
 }[] = [
   { href: "/dashboard", label: "Dashboard", permission: "reports.view", icon: LayoutDashboard },
+  { href: "/ai", label: "AI Copilot", permission: "ai.use", icon: Sparkles },
   { href: "/pos", label: "POS", permission: "pos.bill", icon: ShoppingCart },
   { href: "/kds", label: "KDS", permission: "kds.view", icon: ChefHat },
   { href: "/orders", label: "Orders", permission: "orders.view", icon: ClipboardList },
   { href: "/menu", label: "Menu", permission: "menu.view", icon: UtensilsCrossed },
+  { href: "/inventory", label: "Inventory", permission: "inventory.view", icon: Package },
   { href: "/tables", label: "Tables", permission: "tables.view", icon: Grid3X3 },
+  { href: "/reservations", label: "Reservations", permission: "tables.view", icon: CalendarDays },
+  { href: "/crm", label: "CRM", permission: "reports.view", icon: Heart },
+  { href: "/finance", label: "Finance", permission: "reports.view", icon: Wallet },
+  { href: "/hr", label: "HR", permission: "users.manage", icon: UserCheck },
+  { href: "/marketing", label: "Marketing", permission: "reports.view", icon: Megaphone },
+  { href: "/reports", label: "Reports", permission: "reports.view", icon: BarChart3 },
   { href: "/staff", label: "Waiters", permission: "users.manage", icon: Users },
   { href: "/qr", label: "QR", permission: "qr.manage", icon: QrCode },
-  { href: "/settings", label: "Settings", permission: "qr.manage", icon: Settings },
+  { href: "/settings", label: "Setup", permission: "qr.manage", icon: Settings },
 ];
 
 export function Sidebar({
@@ -125,14 +143,22 @@ export function Sidebar({
         </nav>
 
         <div className="border-t border-[var(--border)] p-3">
-          <p className="truncate text-sm font-medium">{user?.name}</p>
-          <p className="text-xs text-[var(--muted)]">
-            {label(ROLE_LABEL, user?.role)}
-          </p>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">{user?.name}</p>
+              <p className="text-xs text-[var(--muted)]">
+                {label(ROLE_LABEL, user?.role)}
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
+              <NotificationBell />
+              <ThemeToggle />
+            </div>
+          </div>
           <button
             type="button"
             onClick={() => void logout()}
-            className="mt-2 flex w-full items-center gap-2 rounded-[6px] px-2 py-2 text-xs text-[var(--muted)] hover:bg-[var(--surface-2)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
+            className="mt-1 flex w-full items-center gap-2 rounded-[6px] px-2 py-2 text-xs text-[var(--muted)] hover:bg-[var(--surface-2)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
           >
             <LogOut size={14} /> Sign out
           </button>

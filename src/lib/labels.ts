@@ -14,10 +14,15 @@ export const ORDER_STATUS_LABEL: Record<string, string> = {
 };
 
 export const TABLE_STATUS_LABEL: Record<string, string> = {
-  FREE: "Free",
-  OCCUPIED: "In use",
-  BILLED: "Bill due",
+  AVAILABLE: "Available",
+  FREE: "Available",
+  OCCUPIED: "Occupied",
   RESERVED: "Reserved",
+  PREPARING_BILL: "Preparing bill",
+  BILLED: "Preparing bill",
+  CLEANING: "Cleaning",
+  BLOCKED: "Blocked",
+  OUT_OF_SERVICE: "Out of service",
 };
 
 export const SESSION_STATUS_LABEL: Record<string, string> = {
@@ -55,6 +60,7 @@ export const PAY_METHOD_LABEL: Record<string, string> = {
 };
 
 export const ROLE_LABEL: Record<string, string> = {
+  INVENTORY_MANAGER: "Inventory Manager",
   OWNER: "Owner",
   MANAGER: "Manager",
   CASHIER: "Cashier",
@@ -116,6 +122,19 @@ export const RESTAURANT_STATUS_LABEL: Record<string, string> = {
   SUSPENDED: "Suspended",
 };
 
+export const PLAN_LABEL: Record<string, string> = {
+  STARTER: "Starter",
+  GROWTH: "Growth",
+  ENTERPRISE: "Enterprise",
+};
+
+export const BILLING_STATUS_LABEL: Record<string, string> = {
+  TRIAL: "Trial",
+  ACTIVE: "Active",
+  PAST_DUE: "Past due",
+  CANCELLED: "Cancelled",
+};
+
 export const TABLE_SHAPE_LABEL: Record<string, string> = {
   SQUARE: "Square",
   ROUND: "Round",
@@ -154,4 +173,19 @@ export function tableDisplayStatus(
     return label(SESSION_STATUS_LABEL, sessionStatus);
   }
   return label(TABLE_STATUS_LABEL, tableStatus);
+}
+
+/** Legacy FREE counts as available. */
+export function isTableAvailable(status: string): boolean {
+  return status === "AVAILABLE" || status === "FREE";
+}
+
+export function isTableSelectable(status: string): boolean {
+  return (
+    isTableAvailable(status) ||
+    status === "OCCUPIED" ||
+    status === "PREPARING_BILL" ||
+    status === "BILLED" ||
+    status === "CLEANING"
+  );
 }

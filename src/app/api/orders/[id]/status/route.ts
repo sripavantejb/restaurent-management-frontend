@@ -66,6 +66,8 @@ export const PATCH = withAuth(async ({ req, tenant }) => {
       }
       if (body.status === "COMPLETED") {
         order.completedAt = new Date();
+        const { deductInventoryForOrder } = await import("@/lib/inventory");
+        await deductInventoryForOrder(order);
         if (order.tableId) {
           await Table.updateOne(
             {
@@ -73,7 +75,7 @@ export const PATCH = withAuth(async ({ req, tenant }) => {
               restaurantId: tenant.restaurantId,
               branchId: tenant.branchId,
             },
-            { $set: { status: "FREE" } }
+            { $set: { status: "CLEANING" } }
           );
         }
       }

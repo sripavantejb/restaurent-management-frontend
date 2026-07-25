@@ -82,9 +82,13 @@ export interface CheckoutRound {
     unitPrice: number;
     notes?: string;
     variant?: string;
+    addons?: string[];
+    status?: "QUEUED" | "COOKING" | "READY" | string;
   }[];
   total: number;
   placedAt?: string;
+  readyAt?: string | null;
+  servedAt?: string | null;
   prepEtaMins?: number;
 }
 

@@ -1,18 +1,42 @@
 import { z } from "zod";
-import { Table } from "@/models/Table";
+import { Table, TABLE_STATUSES, normalizeTableStatus } from "@/models/Table";
 import { Order } from "@/models/Order";
 import { TableSession } from "@/models/TableSession";
 import { ServiceRequest } from "@/models/ServiceRequest";
 import { QRCode } from "@/models/QRCode";
 import { withAuth, json, error, getParams } from "@/lib/api";
+import { writeAudit } from "@/lib/audit";
+import { emitBranchEvent } from "@/lib/realtime";
 
 const UpdateSchema = z.object({
   number: z.number().int().positive().optional(),
+  name: z.string().optional(),
   capacity: z.number().int().min(1).max(40).optional(),
   shape: z.enum(["SQUARE", "ROUND", "RECT"]).optional(),
   x: z.number().optional(),
   y: z.number().optional(),
-  status: z.enum(["FREE", "OCCUPIED", "BILLED", "RESERVED"]).optional(),
+  width: z.number().positive().optional(),
+  height: z.number().positive().optional(),
+  rotation: z.number().optional(),
+  color: z.string().optional(),
+  isVip: z.boolean().optional(),
+  isOutdoor: z.boolean().optional(),
+  isDisabled: z.boolean().optional(),
+  floorId: z.string().nullable().optional(),
+  sectionId: z.string().nullable().optional(),
+  status: z
+    .enum([
+      "AVAILABLE",
+      "OCCUPIED",
+      "RESERVED",
+      "PREPARING_BILL",
+      "CLEANING",
+      "BLOCKED",
+      "OUT_OF_SERVICE",
+      "FREE",
+      "BILLED",
+    ])
+    .optional(),
 });
 
 export const PATCH = withAuth(async ({ req, tenant }) => {
@@ -39,9 +63,22 @@ export const PATCH = withAuth(async ({ req, tenant }) => {
     }
 
     const setDoc: Record<string, unknown> = { ...body };
-    if (body.status === "FREE") {
+    if (body.status === "AVAILABLE" || body.status === "FREE") {
+      setDoc.status = "AVAILABLE";
       setDoc.currentSessionId = null;
     }
+    if (body.status === "CLEANING") {
+      setDoc.currentSessionId = null;
+    }
+    if (body.status === "BILLED") {
+      setDoc.status = "PREPARING_BILL";
+    }
+
+    const before = await Table.findOne({
+      _id: id,
+      restaurantId: tenant.restaurantId,
+      branchId: tenant.branchId,
+    }).lean();
 
     const table = await Table.findOneAndUpdate(
       {
@@ -55,8 +92,7 @@ export const PATCH = withAuth(async ({ req, tenant }) => {
 
     if (!table) return error("Table not found", 404);
 
-    // Freeing a table also closes any open QR session so guests can start fresh
-    if (body.status === "FREE") {
+    if (body.status === "AVAILABLE" || body.status === "FREE") {
       const openSessions = await TableSession.find({
         restaurantId: tenant.restaurantId,
         branchId: tenant.branchId,
@@ -79,6 +115,27 @@ export const PATCH = withAuth(async ({ req, tenant }) => {
       }
     }
 
+    await writeAudit({
+      restaurantId: tenant.restaurantId,
+      branchId: tenant.branchId,
+      actorId: tenant.userId,
+      actorType: "USER",
+      action: "table.update",
+      entityType: "Table",
+      entityId: id,
+      before: before
+        ? { status: before.status, number: before.number }
+        : null,
+      after: { status: table.status, number: table.number },
+    });
+
+    emitBranchEvent(
+      tenant.restaurantId.toString(),
+      tenant.branchId.toString(),
+      "tables:updated",
+      { id, status: table.status }
+    );
+
     return json({
       id: table._id.toString(),
       number: table.number,
@@ -86,7 +143,12 @@ export const PATCH = withAuth(async ({ req, tenant }) => {
       shape: table.shape,
       x: table.x,
       y: table.y,
-      status: table.status,
+      width: table.width,
+      height: table.height,
+      rotation: table.rotation,
+      status: normalizeTableStatus(table.status),
+      isVip: table.isVip,
+      isOutdoor: table.isOutdoor,
       currentSessionId: table.currentSessionId?.toString() ?? null,
     });
   } catch (err) {
@@ -108,11 +170,15 @@ export const DELETE = withAuth(async ({ req, tenant }) => {
   });
   if (!table) return error("Table not found", 404);
 
-  if (table.status !== "FREE") {
+  const free =
+    table.status === "FREE" ||
+    table.status === "AVAILABLE" ||
+    table.status === "OUT_OF_SERVICE";
+  if (!free) {
     return error(
-      "Only FREE tables can be deleted",
+      "Only available tables can be deleted",
       400,
-      "Clear or complete the open order first, then set the table to FREE."
+      "Clear or complete the open order first, then set the table to Available."
     );
   }
 
@@ -131,11 +197,8 @@ export const DELETE = withAuth(async ({ req, tenant }) => {
     );
   }
 
-  await Table.deleteOne({
-    _id: id,
-    restaurantId: tenant.restaurantId,
-    branchId: tenant.branchId,
-  });
+  table.deletedAt = new Date();
+  await table.save();
 
   await QRCode.updateMany(
     {
@@ -147,5 +210,22 @@ export const DELETE = withAuth(async ({ req, tenant }) => {
     { $set: { isActive: false } }
   );
 
-  return json({ ok: true });
+  await writeAudit({
+    restaurantId: tenant.restaurantId,
+    branchId: tenant.branchId,
+    actorId: tenant.userId,
+    actorType: "USER",
+    action: "table.soft_delete",
+    entityType: "Table",
+    entityId: id,
+  });
+
+  emitBranchEvent(
+    tenant.restaurantId.toString(),
+    tenant.branchId.toString(),
+    "tables:updated",
+    { id, deleted: true }
+  );
+
+  return json({ ok: true, softDeleted: true });
 }, "tables.update");

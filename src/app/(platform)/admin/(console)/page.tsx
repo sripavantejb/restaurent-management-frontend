@@ -13,6 +13,8 @@ interface Counts {
   active: number;
   pending: number;
   suspended: number;
+  trial?: number;
+  billingActive?: number;
 }
 
 interface RestaurantRow {
@@ -71,10 +73,12 @@ export default function PlatformOverviewPage() {
     { label: "Active", value: counts.active },
     { label: "Pending", value: counts.pending },
     { label: "Suspended", value: counts.suspended },
+    { label: "On trial", value: counts.trial ?? 0 },
+    { label: "Billing active", value: counts.billingActive ?? 0 },
   ];
 
   return (
-    <div className="p-6 md:p-8">
+    <div className="p-4 sm:p-6 md:p-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-[var(--ink)]">
@@ -110,7 +114,32 @@ export default function PlatformOverviewPage() {
             View all
           </Link>
         </div>
-        <Card className="overflow-hidden">
+        <div className="space-y-2 sm:hidden">
+          {recent.length === 0 ? (
+            <p className="rounded-[6px] border border-[var(--border)] bg-white px-4 py-8 text-center text-sm text-[var(--muted)]">
+              No restaurants yet. Register the first tenant.
+            </p>
+          ) : (
+            recent.map((r) => (
+              <Link
+                key={r.id}
+                href={`/admin/restaurants/${r.id}`}
+                className="flex items-center justify-between gap-3 rounded-[6px] border border-[var(--border)] bg-white p-3"
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-medium">{r.name}</p>
+                  <p className="text-xs text-[var(--muted)]">
+                    {r.slug} · {r.branchCount} branches
+                  </p>
+                </div>
+                <Badge tone={statusTone(r.status)}>
+                  {label(RESTAURANT_STATUS_LABEL, r.status)}
+                </Badge>
+              </Link>
+            ))
+          )}
+        </div>
+        <Card className="hidden overflow-hidden sm:block">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-[var(--border)] bg-[var(--surface-2)] text-xs uppercase tracking-wide text-[var(--muted)]">
               <tr>

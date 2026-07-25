@@ -17,7 +17,28 @@ const CreateSchema = z.object({
   shape: z.enum(["SQUARE", "ROUND", "RECT"]).default("SQUARE"),
   x: z.number().optional(),
   y: z.number().optional(),
-  status: z.enum(["FREE", "OCCUPIED", "BILLED", "RESERVED"]).optional().default("FREE"),
+  width: z.number().optional().default(72),
+  height: z.number().optional().default(72),
+  rotation: z.number().optional().default(0),
+  color: z.string().optional().default(""),
+  isVip: z.boolean().optional().default(false),
+  isOutdoor: z.boolean().optional().default(false),
+  floorId: z.string().optional().nullable(),
+  sectionId: z.string().optional().nullable(),
+  status: z
+    .enum([
+      "AVAILABLE",
+      "OCCUPIED",
+      "RESERVED",
+      "PREPARING_BILL",
+      "CLEANING",
+      "BLOCKED",
+      "OUT_OF_SERVICE",
+      "FREE",
+      "BILLED",
+    ])
+    .optional()
+    .default("AVAILABLE"),
 });
 
 const ReorderSchema = z.object({
@@ -27,6 +48,9 @@ const ReorderSchema = z.object({
         id: z.string().min(1),
         x: z.number(),
         y: z.number(),
+        width: z.number().optional(),
+        height: z.number().optional(),
+        rotation: z.number().optional(),
         number: z.number().int().positive().optional(),
       })
     )
@@ -105,11 +129,27 @@ export const GET = withAuth(async ({ tenant }) => {
       return {
         id: t._id.toString(),
         number: t.number,
+        name: t.name || "",
         capacity: t.capacity,
         shape: t.shape,
         x: t.x,
         y: t.y,
-        status: t.status,
+        width: t.width ?? 72,
+        height: t.height ?? 72,
+        rotation: t.rotation ?? 0,
+        color: t.color || "",
+        isVip: !!t.isVip,
+        isOutdoor: !!t.isOutdoor,
+        isDisabled: !!t.isDisabled,
+        floorId: t.floorId?.toString() ?? null,
+        sectionId: t.sectionId?.toString() ?? null,
+        mergeGroupId: t.mergeGroupId ?? null,
+        status:
+          t.status === "FREE"
+            ? "AVAILABLE"
+            : t.status === "BILLED"
+              ? "PREPARING_BILL"
+              : t.status,
         currentSessionId: t.currentSessionId?.toString() ?? null,
         currentSession: session
           ? {
@@ -149,6 +189,12 @@ export const POST = withAuth(async ({ req, tenant }) => {
   try {
     const body = CreateSchema.parse(await req.json());
 
+    const { assertWithinLimit } = await import("@/lib/billing/limits");
+    const limit = await assertWithinLimit(tenant.restaurantId, "tables");
+    if (!limit.ok) {
+      return error(limit.message, 403, limit.hint);
+    }
+
     const existing = (await Table.find({
       restaurantId: tenant.restaurantId,
       branchId: tenant.branchId,
@@ -182,7 +228,16 @@ export const POST = withAuth(async ({ req, tenant }) => {
       shape: body.shape,
       x,
       y,
-      status: body.status ?? "FREE",
+      width: body.width ?? 72,
+      height: body.height ?? 72,
+      rotation: body.rotation ?? 0,
+      color: body.color ?? "",
+      isVip: body.isVip ?? false,
+      isOutdoor: body.isOutdoor ?? false,
+      floorId: body.floorId || null,
+      sectionId: body.sectionId || null,
+      status:
+        body.status === "FREE" || !body.status ? "AVAILABLE" : body.status,
     });
 
     return json(

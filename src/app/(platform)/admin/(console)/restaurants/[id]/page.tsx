@@ -7,7 +7,12 @@ import { platformFetch } from "@/components/PlatformAuthProvider";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { RESTAURANT_STATUS_LABEL, label } from "@/lib/labels";
+import {
+  RESTAURANT_STATUS_LABEL,
+  PLAN_LABEL,
+  BILLING_STATUS_LABEL,
+  label,
+} from "@/lib/labels";
 
 interface Detail {
   restaurant: {
@@ -15,6 +20,12 @@ interface Detail {
     name: string;
     slug: string;
     status: string;
+    plan: string;
+    billingStatus: string;
+    trialEndsAt: string | null;
+    currentPeriodEnd: string | null;
+    razorpayCustomerId: string;
+    razorpaySubscriptionId: string;
     address: string;
     gstNumber: string;
     contactEmail: string;
@@ -22,6 +33,16 @@ interface Detail {
     currency: string;
     timezone: string;
     createdAt: string | null;
+  };
+  usage: {
+    branches: number;
+    staff: number;
+    tables: number;
+    limits: {
+      maxBranches: number;
+      maxStaff: number;
+      maxTables: number;
+    };
   };
   branches: {
     id: string;
@@ -41,17 +62,42 @@ function statusTone(status: string): "success" | "warn" | "danger" | "neutral" {
   return "neutral";
 }
 
+function billingTone(
+  status: string
+): "success" | "warn" | "danger" | "neutral" {
+  if (status === "ACTIVE") return "success";
+  if (status === "TRIAL") return "warn";
+  if (status === "PAST_DUE" || status === "CANCELLED") return "danger";
+  return "neutral";
+}
+
+function fmtLimit(n: number) {
+  return n < 0 ? "∞" : String(n);
+}
+
+function fmtDate(v: string | null) {
+  if (!v) return "—";
+  return new Date(v).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 export default function RestaurantDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
   const [data, setData] = useState<Detail | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [checkoutPlan, setCheckoutPlan] = useState("GROWTH");
+  const [checkoutMsg, setCheckoutMsg] = useState("");
 
   const load = useCallback(async () => {
     try {
       const res = await platformFetch(`/api/platform/restaurants/${id}`);
       setData(res);
+      setCheckoutPlan(res.restaurant.plan || "STARTER");
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load");
@@ -77,6 +123,48 @@ export default function RestaurantDetailPage() {
     }
   }
 
+  async function setPlan(plan: string) {
+    setBusy(true);
+    try {
+      await platformFetch(`/api/platform/restaurants/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ plan }),
+      });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Plan update failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function startCheckout() {
+    setBusy(true);
+    setCheckoutMsg("");
+    try {
+      const res = await platformFetch(
+        `/api/platform/restaurants/${id}/billing/checkout`,
+        {
+          method: "POST",
+          body: JSON.stringify({ plan: checkoutPlan }),
+        }
+      );
+      if (res.shortUrl) {
+        window.open(res.shortUrl as string, "_blank", "noopener,noreferrer");
+        setCheckoutMsg(
+          "Razorpay checkout opened. After payment, webhook will mark billing Active."
+        );
+      } else {
+        setCheckoutMsg(`Subscription ${res.subscriptionId} created (${res.status}).`);
+      }
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Checkout failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (error && !data) {
     return (
       <div className="p-4 sm:p-6">
@@ -91,10 +179,10 @@ export default function RestaurantDetailPage() {
     return <div className="p-6 text-[var(--muted)]">Loading restaurant…</div>;
   }
 
-  const { restaurant, branches, owners, staffCount } = data;
+  const { restaurant, branches, owners, staffCount, usage } = data;
 
   return (
-    <div className="p-6 md:p-8">
+    <div className="p-4 sm:p-6 md:p-8">
       <Link
         href="/admin/restaurants"
         className="text-sm text-[var(--muted)] hover:text-[var(--accent)]"
@@ -111,11 +199,16 @@ export default function RestaurantDetailPage() {
             <Badge tone={statusTone(restaurant.status)}>
               {label(RESTAURANT_STATUS_LABEL, restaurant.status)}
             </Badge>
+            <Badge tone={billingTone(restaurant.billingStatus)}>
+              {label(BILLING_STATUS_LABEL, restaurant.billingStatus)}
+            </Badge>
           </div>
           <p className="mt-1 text-sm text-[var(--muted)]">
             <span className="num">{restaurant.slug}</span>
+            {" · "}
+            {label(PLAN_LABEL, restaurant.plan)}
             {restaurant.createdAt
-              ? ` · registered ${new Date(restaurant.createdAt).toLocaleDateString("en-IN")}`
+              ? ` · registered ${fmtDate(restaurant.createdAt)}`
               : ""}
           </p>
         </div>
@@ -155,6 +248,81 @@ export default function RestaurantDetailPage() {
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
         <Card className="p-5">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
+            Billing
+          </h2>
+          <dl className="mt-4 space-y-3 text-sm">
+            <div>
+              <dt className="text-xs text-[var(--muted)]">Plan</dt>
+              <dd className="mt-1 flex flex-wrap items-center gap-2">
+                <select
+                  className="h-9 rounded-[6px] border border-[var(--border)] bg-white px-2 text-sm"
+                  value={restaurant.plan}
+                  disabled={busy}
+                  onChange={(e) => void setPlan(e.target.value)}
+                >
+                  <option value="STARTER">Starter</option>
+                  <option value="GROWTH">Growth</option>
+                  <option value="ENTERPRISE">Enterprise</option>
+                </select>
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-[var(--muted)]">Billing status</dt>
+              <dd>{label(BILLING_STATUS_LABEL, restaurant.billingStatus)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-[var(--muted)]">Trial ends</dt>
+              <dd>{fmtDate(restaurant.trialEndsAt)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-[var(--muted)]">Current period end</dt>
+              <dd>{fmtDate(restaurant.currentPeriodEnd)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-[var(--muted)]">Usage vs limits</dt>
+              <dd className="num mt-1 text-[var(--muted)]">
+                Branches {usage.branches}/{fmtLimit(usage.limits.maxBranches)} ·
+                Staff {usage.staff}/{fmtLimit(usage.limits.maxStaff)} · Tables{" "}
+                {usage.tables}/{fmtLimit(usage.limits.maxTables)}
+              </dd>
+            </div>
+            {restaurant.razorpaySubscriptionId ? (
+              <div>
+                <dt className="text-xs text-[var(--muted)]">Razorpay subscription</dt>
+                <dd className="num break-all text-xs">
+                  {restaurant.razorpaySubscriptionId}
+                </dd>
+              </div>
+            ) : null}
+          </dl>
+
+          <div className="mt-5 border-t border-[var(--border)] pt-4">
+            <p className="text-xs font-medium text-[var(--muted)]">
+              Start Razorpay subscription
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <select
+                className="h-10 rounded-[6px] border border-[var(--border)] bg-white px-3 text-sm"
+                value={checkoutPlan}
+                disabled={busy}
+                onChange={(e) => setCheckoutPlan(e.target.value)}
+              >
+                <option value="STARTER">Starter</option>
+                <option value="GROWTH">Growth</option>
+                <option value="ENTERPRISE">Enterprise</option>
+              </select>
+              <Button disabled={busy} onClick={() => void startCheckout()}>
+                Open checkout
+              </Button>
+            </div>
+            {checkoutMsg ? (
+              <p className="mt-2 text-xs text-[var(--muted)]">{checkoutMsg}</p>
+            ) : null}
+          </div>
+        </Card>
+
+        <Card className="p-5">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
             Tenant details
           </h2>
           <dl className="mt-4 space-y-3 text-sm">
@@ -184,13 +352,13 @@ export default function RestaurantDetailPage() {
               <dd className="num">{staffCount}</dd>
               <p className="mt-2 text-xs text-[var(--muted)]">
                 Day-to-day waiter accounts and performance live in the restaurant
-                console under <strong>Waiters</strong> (owner/manager login).
+                console under Waiters (owner/manager login).
               </p>
             </div>
           </dl>
         </Card>
 
-        <Card className="p-5">
+        <Card className="p-5 lg:col-span-2">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
             Owners
           </h2>
@@ -226,10 +394,15 @@ export default function RestaurantDetailPage() {
           </thead>
           <tbody>
             {branches.map((b) => (
-              <tr key={b.id} className="border-b border-[var(--border)] last:border-0">
+              <tr
+                key={b.id}
+                className="border-b border-[var(--border)] last:border-0"
+              >
                 <td className="px-4 py-3 font-medium">{b.name}</td>
                 <td className="px-4 py-3 num">{b.code}</td>
-                <td className="px-4 py-3 text-[var(--muted)]">{b.address || "—"}</td>
+                <td className="px-4 py-3 text-[var(--muted)]">
+                  {b.address || "—"}
+                </td>
                 <td className="px-4 py-3">{b.isActive ? "Yes" : "No"}</td>
               </tr>
             ))}

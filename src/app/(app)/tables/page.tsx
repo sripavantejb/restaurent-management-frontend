@@ -16,6 +16,7 @@ import {
   ORDER_STATUS_LABEL,
   TABLE_SHAPE_LABEL,
   TABLE_STATUS_LABEL,
+  isTableAvailable,
   label,
   tableDisplayStatus,
 } from "@/lib/labels";
@@ -29,6 +30,9 @@ interface TableRow {
   x: number;
   y: number;
   status: string;
+  isVip?: boolean;
+  isOutdoor?: boolean;
+  mergeGroupId?: string | null;
   currentSessionId?: string | null;
   currentSession: {
     id: string;
@@ -56,11 +60,26 @@ interface TableRow {
 }
 
 const STATUS_COLOR: Record<string, string> = {
+  AVAILABLE: "#2A9D8F",
   FREE: "#2A9D8F",
   OCCUPIED: "#E9C46A",
-  BILLED: "#3B82F6",
   RESERVED: "#6B6560",
+  PREPARING_BILL: "#3B82F6",
+  BILLED: "#3B82F6",
+  CLEANING: "#A78BFA",
+  BLOCKED: "#EF4444",
+  OUT_OF_SERVICE: "#9CA3AF",
 };
+
+const EDIT_STATUSES = [
+  "AVAILABLE",
+  "OCCUPIED",
+  "RESERVED",
+  "PREPARING_BILL",
+  "CLEANING",
+  "BLOCKED",
+  "OUT_OF_SERVICE",
+] as const;
 
 const SHAPES = ["SQUARE", "ROUND", "RECT"] as const;
 
@@ -88,8 +107,11 @@ export default function TablesPage() {
     number: "",
     capacity: "4",
     shape: "SQUARE" as (typeof SHAPES)[number],
-    status: "FREE",
+    status: "AVAILABLE",
+    isVip: false,
+    isOutdoor: false,
   });
+  const [mergeIds, setMergeIds] = useState<string[]>([]);
 
   const dragRef = useRef<{
     id: string;
@@ -141,7 +163,9 @@ export default function TablesPage() {
       number: String(next),
       capacity: "4",
       shape: "SQUARE",
-      status: "FREE",
+      status: "AVAILABLE",
+      isVip: false,
+      isOutdoor: false,
     });
     setCreateOpen(true);
   }
@@ -155,7 +179,9 @@ export default function TablesPage() {
       shape: (SHAPES.includes(t.shape as (typeof SHAPES)[number])
         ? t.shape
         : "SQUARE") as (typeof SHAPES)[number],
-      status: t.status,
+      status: isTableAvailable(t.status) ? "AVAILABLE" : t.status,
+      isVip: !!t.isVip,
+      isOutdoor: !!t.isOutdoor,
     });
   }
 
@@ -227,7 +253,9 @@ export default function TablesPage() {
           number: form.number ? Number(form.number) : undefined,
           capacity: Number(form.capacity) || 4,
           shape: form.shape,
-          status: "FREE",
+          status: "AVAILABLE",
+          isVip: form.isVip,
+          isOutdoor: form.isOutdoor,
         }),
       });
       setCreateOpen(false);
@@ -253,6 +281,8 @@ export default function TablesPage() {
           capacity: Number(form.capacity) || 4,
           shape: form.shape,
           status: form.status,
+          isVip: form.isVip,
+          isOutdoor: form.isOutdoor,
         }),
       });
       setTables((prev) =>
@@ -264,6 +294,8 @@ export default function TablesPage() {
                 capacity: updated.capacity,
                 shape: updated.shape,
                 status: updated.status,
+                isVip: updated.isVip,
+                isOutdoor: updated.isOutdoor,
               }
             : t
         )
@@ -275,6 +307,52 @@ export default function TablesPage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function markCleaned(tableId: string) {
+    setBusy(true);
+    try {
+      await apiFetch(`/api/tables/${tableId}`, {
+        method: "PATCH",
+        branchId: activeBranchId,
+        body: JSON.stringify({ status: "AVAILABLE" }),
+      });
+      showToast("Table marked available");
+      setSelected(null);
+      await load(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Update failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function mergeSelectedTables() {
+    if (mergeIds.length < 2) {
+      showToast("Select 2+ available tables to merge");
+      return;
+    }
+    setBusy(true);
+    try {
+      const data = await apiFetch("/api/tables/merge", {
+        method: "POST",
+        branchId: activeBranchId,
+        body: JSON.stringify({ tableIds: mergeIds }),
+      });
+      showToast(`Merged · group ${data.mergeGroupId?.slice(0, 8) ?? ""}`);
+      setMergeIds([]);
+      await load(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Merge failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function toggleMergePick(id: string) {
+    setMergeIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
   }
 
   async function deleteSelected() {
@@ -529,16 +607,19 @@ export default function TablesPage() {
       </div>
 
       <div className="mt-3 flex flex-wrap gap-4 text-xs text-[var(--muted)]">
-        {Object.entries(STATUS_COLOR).map(([k, c]) => (
+        {EDIT_STATUSES.map((k) => (
           <span key={k} className="inline-flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-full" style={{ background: c }} />
+            <span
+              className="h-2.5 w-2.5 rounded-full"
+              style={{ background: STATUS_COLOR[k] }}
+            />
             {label(TABLE_STATUS_LABEL, k)}
           </span>
         ))}
       </div>
 
       {editMode && canEdit ? (
-        <div className="mt-4 flex flex-wrap gap-2 rounded-[6px] border border-[var(--border)] bg-white p-3">
+        <div className="mt-4 flex flex-wrap gap-2 rounded-[6px] border border-[var(--border)] bg-[var(--surface)] p-3">
           <Button variant="secondary" size="sm" onClick={autoGrid}>
             Snap to grid
           </Button>
@@ -552,13 +633,30 @@ export default function TablesPage() {
           >
             Save layout
           </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={busy || mergeIds.length < 2}
+            onClick={() => void mergeSelectedTables()}
+          >
+            Merge selected ({mergeIds.length})
+          </Button>
+          {mergeIds.length ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setMergeIds([])}
+            >
+              Clear merge picks
+            </Button>
+          ) : null}
           {dirty ? (
             <span className="self-center text-xs text-[var(--accent)]">
               Unsaved position / number changes
             </span>
           ) : (
             <span className="self-center text-xs text-[var(--muted)]">
-              Drag tables on the floor to reorder positions
+              Drag tables · click ↑/↓ to renumber · pick free tables then Merge
             </span>
           )}
         </div>
@@ -596,12 +694,16 @@ export default function TablesPage() {
                   type="button"
                   onClick={() => {
                     if (dragRef.current?.moved) return;
+                    if (editMode && isTableAvailable(t.status)) {
+                      toggleMergePick(t.id);
+                      return;
+                    }
                     openEdit(t);
                   }}
                   onPointerDown={(e) => onPointerDown(e, t)}
-                  className={`absolute flex flex-col items-center justify-center border-2 bg-white text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)] ${
+                  className={`absolute flex flex-col items-center justify-center border-2 bg-[var(--surface)] text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)] ${
                     editMode ? "cursor-grab active:cursor-grabbing" : ""
-                  }`}
+                  } ${mergeIds.includes(t.id) ? "ring-2 ring-[var(--accent)]" : ""}`}
                   style={{
                     left: t.x,
                     top: t.y,
@@ -611,7 +713,7 @@ export default function TablesPage() {
                     borderColor:
                       t.currentSession?.status === "BILL_REQUESTED"
                         ? "#3B82F6"
-                        : STATUS_COLOR[t.status],
+                        : STATUS_COLOR[t.status] ?? "#6B6560",
                     touchAction: editMode ? "none" : undefined,
                   }}
                 >
@@ -620,6 +722,8 @@ export default function TablesPage() {
                     {t.currentSession?.status === "BILL_REQUESTED"
                       ? "Bill due"
                       : `${t.capacity}p`}
+                    {t.isVip ? " · VIP" : ""}
+                    {t.isOutdoor ? " · Out" : ""}
                     {t.qrCode ? " · QR" : ""}
                   </span>
                 </button>
@@ -725,6 +829,22 @@ export default function TablesPage() {
               ))}
             </select>
           </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={form.isVip}
+              onChange={(e) => setForm({ ...form, isVip: e.target.checked })}
+            />
+            VIP table
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={form.isOutdoor}
+              onChange={(e) => setForm({ ...form, isOutdoor: e.target.checked })}
+            />
+            Outdoor
+          </label>
           <Button
             className="w-full"
             disabled={busy}
@@ -791,31 +911,66 @@ export default function TablesPage() {
                 <label className="block text-xs text-[var(--muted)]">
                   Status
                   <select
-                    className="mt-1 h-10 w-full rounded-[6px] border border-[var(--border)] px-2"
+                    className="mt-1 h-10 w-full rounded-[6px] border border-[var(--border)] bg-[var(--surface)] px-2"
                     value={form.status}
                     onChange={(e) =>
                       setForm({ ...form, status: e.target.value })
                     }
                   >
-                    {Object.keys(STATUS_COLOR).map((s) => (
+                    {EDIT_STATUSES.map((s) => (
                       <option key={s} value={s}>
                         {label(TABLE_STATUS_LABEL, s)}
                       </option>
                     ))}
                   </select>
                 </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={form.isVip}
+                    onChange={(e) =>
+                      setForm({ ...form, isVip: e.target.checked })
+                    }
+                  />
+                  VIP
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={form.isOutdoor}
+                    onChange={(e) =>
+                      setForm({ ...form, isOutdoor: e.target.checked })
+                    }
+                  />
+                  Outdoor
+                </label>
               </>
             ) : (
               <>
                 <p>
                   Status:{" "}
-                  <strong style={{ color: STATUS_COLOR[selected.status] }}>
+                  <strong
+                    style={{
+                      color: STATUS_COLOR[selected.status] ?? undefined,
+                    }}
+                  >
                     {label(TABLE_STATUS_LABEL, selected.status)}
                   </strong>
+                  {selected.isVip ? " · VIP" : ""}
+                  {selected.isOutdoor ? " · Outdoor" : ""}
                 </p>
                 <p>Capacity: {selected.capacity}</p>
               </>
             )}
+
+            {selected.status === "CLEANING" && canEdit ? (
+              <Button
+                disabled={busy}
+                onClick={() => void markCleaned(selected.id)}
+              >
+                Mark cleaned → Available
+              </Button>
+            ) : null}
 
             {selected.currentSession ? (
               <div className="rounded-[6px] border border-[var(--border)] p-3">
@@ -979,7 +1134,7 @@ export default function TablesPage() {
                 </Button>
                 <Button
                   variant="danger"
-                  disabled={busy || selected.status !== "FREE"}
+                  disabled={busy || !isTableAvailable(selected.status)}
                   onClick={() => void deleteSelected()}
                 >
                   Delete table

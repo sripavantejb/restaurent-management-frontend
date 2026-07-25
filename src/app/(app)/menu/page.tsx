@@ -151,7 +151,54 @@ export default function MenuPage() {
         </p>
       ) : null}
 
-      <div className="mt-4 overflow-auto rounded-[6px] border border-[var(--border)] bg-white">
+      <div className="mt-4 space-y-2 sm:hidden">
+        {items.map((item) => (
+          <div
+            key={item.id}
+            className={`rounded-[6px] border border-[var(--border)] bg-white p-3 ${
+              item.isAvailable ? "" : "opacity-60"
+            }`}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="flex items-center gap-2 font-medium">
+                  <span
+                    className="inline-block h-2 w-2 shrink-0 rounded-sm border border-current"
+                    style={{
+                      color: item.isVeg ? "#15803d" : "#b91c1c",
+                      background: item.isVeg ? "#16a34a" : "#dc2626",
+                    }}
+                  />
+                  <span className="truncate">{item.name}</span>
+                </p>
+                <p className="mt-0.5 text-xs text-[var(--muted)]">
+                  {catName(item.categoryId)} · {formatMoney(item.price)}
+                </p>
+              </div>
+              <div className="flex shrink-0 flex-col items-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => void toggleAvailable(item)}
+                  className={`h-8 rounded-[6px] px-3 text-xs font-medium ${
+                    item.isAvailable
+                      ? "bg-[var(--success)]/15 text-[var(--success)]"
+                      : "bg-[var(--surface-2)] text-[var(--muted)]"
+                  }`}
+                >
+                  {item.isAvailable ? "Available" : "Sold out"}
+                </button>
+                {hasPermission("menu.edit") ? (
+                  <Button variant="ghost" size="sm" onClick={() => openEdit(item)}>
+                    Edit
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-4 hidden overflow-auto rounded-[6px] border border-[var(--border)] bg-white sm:block">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-[var(--border)] bg-[var(--surface-2)] text-xs text-[var(--muted)]">
             <tr>

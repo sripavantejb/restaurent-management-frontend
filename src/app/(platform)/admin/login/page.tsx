@@ -54,7 +54,7 @@ function LoginForm() {
     >
       <form
         onSubmit={onSubmit}
-        className="w-full max-w-md border border-[var(--border)] bg-white/90 p-8"
+        className="w-full max-w-md border border-[var(--border)] bg-white/90 p-6 sm:p-8"
       >
         <p className="text-xs font-semibold tracking-[0.2em] text-[var(--accent)] uppercase">
           RestaurantOS

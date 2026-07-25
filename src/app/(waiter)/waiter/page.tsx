@@ -13,6 +13,7 @@ import {
   ORDER_STATUS_LABEL,
   SERVICE_TYPE_LABEL,
   SESSION_STATUS_LABEL,
+  TABLE_STATUS_LABEL,
   label,
 } from "@/lib/labels";
 import { ApprovalQueue } from "@/components/ApprovalQueue";
@@ -73,10 +74,15 @@ interface TableOrder {
 type Tab = "floor" | "order" | "status" | "calls";
 
 const STATUS_COLOR: Record<string, string> = {
+  AVAILABLE: "#2A9D8F",
   FREE: "#2A9D8F",
   OCCUPIED: "#E9C46A",
+  PREPARING_BILL: "#3B82F6",
   BILLED: "#3B82F6",
+  CLEANING: "#A78BFA",
   RESERVED: "#6B6560",
+  BLOCKED: "#EF4444",
+  OUT_OF_SERVICE: "#9CA3AF",
 };
 
 export default function WaiterFloorPage() {
@@ -411,21 +417,15 @@ export default function WaiterFloorPage() {
           {tab === "floor" ? (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               <div className="flex flex-wrap gap-3 border-b border-[var(--border)] px-3 py-2 text-[11px] text-[var(--muted)]">
-                {Object.entries(STATUS_COLOR).map(([k, c]) => (
+                {Object.entries(STATUS_COLOR)
+                  .filter(([k]) => !["FREE", "BILLED"].includes(k))
+                  .map(([k, c]) => (
                   <span key={k} className="inline-flex items-center gap-1.5">
                     <span
                       className="h-2 w-2 rounded-full"
                       style={{ background: c }}
                     />
-                    {label(
-                      {
-                        FREE: "Free",
-                        OCCUPIED: "In use",
-                        BILLED: "Bill due",
-                        RESERVED: "Reserved",
-                      },
-                      k
-                    )}
+                    {label(TABLE_STATUS_LABEL, k)}
                   </span>
                 ))}
                 <span className="text-[var(--muted)]">
@@ -438,50 +438,91 @@ export default function WaiterFloorPage() {
                     No tables on this branch yet.
                   </p>
                 ) : (
-                  <div
-                    className="relative mx-auto"
-                    style={{ width: maxX, height: maxY, minHeight: 320 }}
-                  >
-                    {tables.map((t) => {
-                      const billDue =
-                        t.currentSession?.status === "BILL_REQUESTED";
-                      const selectedHere = selected?.id === t.id;
-                      return (
-                        <button
-                          key={t.id}
-                          type="button"
-                          onClick={() => selectTable(t)}
-                          className="absolute flex flex-col items-center justify-center border-2 bg-white text-sm font-medium shadow-sm transition hover:brightness-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
-                          style={{
-                            left: t.x,
-                            top: t.y,
-                            width: t.shape === "RECT" ? 100 : 80,
-                            height: t.shape === "RECT" ? 64 : 80,
-                            borderRadius: t.shape === "ROUND" ? 999 : 6,
-                            borderColor: selectedHere
-                              ? "var(--accent)"
-                              : billDue
-                                ? "#3B82F6"
-                                : STATUS_COLOR[t.status] || "#6B6560",
-                            boxShadow: selectedHere
-                              ? "0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent)"
-                              : undefined,
-                          }}
-                        >
-                          <span className="num text-lg font-bold">
-                            T{t.number}
-                          </span>
-                          <span className="text-[10px] text-[var(--muted)]">
-                            {billDue
-                              ? "Bill"
-                              : t.currentSession
-                                ? `${t.currentSession.rounds}r`
-                                : `${t.capacity}p`}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:hidden">
+                      {[...tables]
+                        .sort((a, b) => a.number - b.number)
+                        .map((t) => {
+                          const billDue =
+                            t.currentSession?.status === "BILL_REQUESTED";
+                          const selectedHere = selected?.id === t.id;
+                          return (
+                            <button
+                              key={t.id}
+                              type="button"
+                              onClick={() => selectTable(t)}
+                              className={`flex min-h-[72px] flex-col items-center justify-center rounded-[6px] border-2 bg-white p-2 text-sm font-medium ${
+                                selectedHere
+                                  ? "border-[var(--accent)] bg-[var(--accent)]/5"
+                                  : "border-[var(--border)]"
+                              }`}
+                              style={{
+                                borderColor: selectedHere
+                                  ? undefined
+                                  : billDue
+                                    ? "#3B82F6"
+                                    : STATUS_COLOR[t.status] || undefined,
+                              }}
+                            >
+                              <span className="num text-lg font-bold">
+                                T{t.number}
+                              </span>
+                              <span className="text-[10px] text-[var(--muted)]">
+                                {billDue
+                                  ? "Bill due"
+                                  : t.currentSession
+                                    ? `${t.currentSession.rounds} rounds`
+                                    : label(TABLE_STATUS_LABEL, t.status)}
+                              </span>
+                            </button>
+                          );
+                        })}
+                    </div>
+                    <div
+                      className="relative mx-auto hidden md:block"
+                      style={{ width: maxX, height: maxY, minHeight: 320 }}
+                    >
+                      {tables.map((t) => {
+                        const billDue =
+                          t.currentSession?.status === "BILL_REQUESTED";
+                        const selectedHere = selected?.id === t.id;
+                        return (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => selectTable(t)}
+                            className="absolute flex flex-col items-center justify-center border-2 bg-white text-sm font-medium shadow-sm transition hover:brightness-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
+                            style={{
+                              left: t.x,
+                              top: t.y,
+                              width: t.shape === "RECT" ? 100 : 80,
+                              height: t.shape === "RECT" ? 64 : 80,
+                              borderRadius: t.shape === "ROUND" ? 999 : 6,
+                              borderColor: selectedHere
+                                ? "var(--accent)"
+                                : billDue
+                                  ? "#3B82F6"
+                                  : STATUS_COLOR[t.status] || "#6B6560",
+                              boxShadow: selectedHere
+                                ? "0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent)"
+                                : undefined,
+                            }}
+                          >
+                            <span className="num text-lg font-bold">
+                              T{t.number}
+                            </span>
+                            <span className="text-[10px] text-[var(--muted)]">
+                              {billDue
+                                ? "Bill"
+                                : t.currentSession
+                                  ? `${t.currentSession.rounds}r`
+                                  : `${t.capacity}p`}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
                 )}
               </div>
             </div>

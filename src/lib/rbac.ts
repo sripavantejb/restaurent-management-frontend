@@ -4,6 +4,7 @@ export const ROLES = [
   "CASHIER",
   "WAITER",
   "CHEF",
+  "INVENTORY_MANAGER",
 ] as const;
 
 export type Role = (typeof ROLES)[number];
@@ -27,6 +28,14 @@ export const PERMISSIONS = [
   "sessions.manage",
   "users.manage",
   "waiter.floor",
+  "inventory.view",
+  "inventory.edit",
+  "inventory.purchase",
+  "inventory.approve",
+  "inventory.transfer",
+  "inventory.finance",
+  "ai.use",
+  "ai.actions",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -55,6 +64,26 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "sessions.manage",
     "users.manage",
     "waiter.floor",
+    "inventory.view",
+    "inventory.edit",
+    "inventory.purchase",
+    "inventory.approve",
+    "inventory.transfer",
+    "inventory.finance",
+    "ai.use",
+    "ai.actions",
+  ],
+  INVENTORY_MANAGER: [
+    "dashboard.view",
+    "inventory.view",
+    "inventory.edit",
+    "inventory.purchase",
+    "inventory.approve",
+    "inventory.transfer",
+    "menu.view",
+    "branch.switch",
+    "ai.use",
+    "ai.actions",
   ],
   CASHIER: [
     "pos.bill",
@@ -65,6 +94,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "tables.view",
     "payments.create",
     "sessions.manage",
+    "inventory.view",
+    "ai.use",
   ],
   WAITER: [
     "pos.bill",
@@ -77,8 +108,16 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "sessions.manage",
     "waiter.floor",
     "payments.create",
+    "ai.use",
   ],
-  CHEF: ["kds.view", "kds.update", "orders.view", "orders.update"],
+  CHEF: [
+    "kds.view",
+    "kds.update",
+    "orders.view",
+    "orders.update",
+    "inventory.view",
+    "ai.use",
+  ],
 };
 
 export function permissionsForRole(role: Role): Permission[] {
@@ -101,6 +140,8 @@ export function homePathForRole(role: Role): string {
       return "/kds";
     case "WAITER":
       return "/waiter";
+    case "INVENTORY_MANAGER":
+      return "/inventory";
     default:
       return "/dashboard";
   }

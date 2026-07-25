@@ -15,15 +15,21 @@ export function GuestMenu({
   activeCat,
   items,
   currency,
+  qtyByItemId,
   onCategory,
   onOpenItem,
+  onIncSimple,
+  onDecSimple,
 }: {
   categories: Category[];
   activeCat: string;
   items: MenuItem[];
   currency: string;
+  qtyByItemId: Record<string, number>;
   onCategory: (id: string) => void;
   onOpenItem: (item: MenuItem) => void;
+  onIncSimple: (item: MenuItem) => void;
+  onDecSimple: (item: MenuItem) => void;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const activeName =
@@ -42,6 +48,10 @@ export function GuestMenu({
     },
     { scope: root, dependencies: [activeCat, items.length] }
   );
+
+  function needsConfig(item: MenuItem) {
+    return (item.variants?.length ?? 0) > 0 || (item.addons?.length ?? 0) > 0;
+  }
 
   return (
     <div ref={root}>
@@ -73,15 +83,20 @@ export function GuestMenu({
             items.map((it) => {
               const unavailable = !it.isAvailable;
               const spice = Math.max(0, Math.min(3, it.spiceLevel || 0));
+              const inCartQty = qtyByItemId[it.id] ?? 0;
+              const configurable = needsConfig(it);
+
               return (
-                <button
+                <div
                   key={it.id}
-                  type="button"
-                  disabled={unavailable}
-                  onClick={() => onOpenItem(it)}
-                  className={`${styles.menuItem} g-menu-item`}
+                  className={`${styles.menuItem} g-menu-item ${unavailable ? styles.menuItemDisabled : ""}`}
                 >
-                  <div className={styles.menuItemBody}>
+                  <button
+                    type="button"
+                    disabled={unavailable}
+                    onClick={() => onOpenItem(it)}
+                    className={styles.menuItemBodyBtn}
+                  >
                     <div className={styles.menuItemTop}>
                       <div>
                         <span
@@ -120,17 +135,61 @@ export function GuestMenu({
                         <span className={styles.muted} style={{ fontSize: 12 }}>
                           Currently unavailable
                         </span>
-                      ) : (
+                      ) : configurable ? (
                         <span className={styles.muted} style={{ fontSize: 12 }}>
                           Tap to customize
                         </span>
+                      ) : inCartQty > 0 ? (
+                        <span className={styles.muted} style={{ fontSize: 12 }}>
+                          {inCartQty} in cart
+                        </span>
+                      ) : (
+                        <span className={styles.muted} style={{ fontSize: 12 }}>
+                          Tap + to add
+                        </span>
                       )}
                     </div>
-                  </div>
-                  <span className={styles.menuAdd} aria-hidden>
-                    +
-                  </span>
-                </button>
+                  </button>
+
+                  {unavailable ? (
+                    <span className={`${styles.menuAdd} ${styles.menuAddDisabled}`} aria-hidden>
+                      +
+                    </span>
+                  ) : !configurable && inCartQty > 0 ? (
+                    <div className={styles.menuQtyControl} aria-label={`${it.name} quantity`}>
+                      <button
+                        type="button"
+                        className={styles.menuQtyBtn}
+                        aria-label={`Remove one ${it.name}`}
+                        onClick={() => onDecSimple(it)}
+                      >
+                        −
+                      </button>
+                      <span className={styles.num} style={{ fontWeight: 700, minWidth: 18, textAlign: "center" }}>
+                        {inCartQty}
+                      </span>
+                      <button
+                        type="button"
+                        className={styles.menuQtyBtn}
+                        aria-label={`Add one ${it.name}`}
+                        onClick={() => onIncSimple(it)}
+                      >
+                        +
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className={styles.menuAdd}
+                      aria-label={configurable ? `Customize ${it.name}` : `Add ${it.name}`}
+                      onClick={() =>
+                        configurable ? onOpenItem(it) : onIncSimple(it)
+                      }
+                    >
+                      +
+                    </button>
+                  )}
+                </div>
               );
             })
           )}

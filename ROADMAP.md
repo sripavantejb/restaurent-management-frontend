@@ -2,7 +2,13 @@
 
 Dependency order for the remaining product surface. Inventory must land before procurement. Offline POS needs an IndexedDB write-ahead queue with idempotent server-side order IDs.
 
-1. **Inventory** — stock levels, units, wastage, recipe → menu item links  
+## Next build (PetPooja gap — Tier 1)
+
+~~**Inventory + recipes**~~ — **shipped** (`/inventory`, auto-deduct on pay). See `src/modules/inventory/README.md`.
+
+**Next up:** payment gateway → CRM/loyalty → delivery aggregators → offline POS.
+
+1. ~~**Inventory**~~ — **shipped** (stock, recipes, wastage, auto-deduct)  
 2. **Warehouse** — multi-location stock, transfers between branch stores  
 3. **Procurement** — POs against inventory; suppliers; goods receipt  
 4. **Supplier portal** — external login for vendors to accept POs and upload invoices  
@@ -22,7 +28,7 @@ Dependency order for the remaining product surface. Inventory must land before p
 |---|---|
 | Offline POS | IndexedDB queue + idempotent sync is a multi-week problem |
 | Websockets | 2s polling is enough at demo scale |
-| Inventory / recipes | Needs menu + order models stable first |
+| Inventory / recipes | Needs menu + order models stable first — **now the next module** |
 | Procurement, HRMS, payroll, finance | Each is a full product |
 | CRM, reservations, AI | Depend on settled Order model |
 | Delivery aggregators | External partner APIs |

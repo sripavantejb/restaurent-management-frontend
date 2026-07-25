@@ -4,6 +4,7 @@ import { Table } from "@/models/Table";
 import { TableSession } from "@/models/TableSession";
 import { ServiceRequest } from "@/models/ServiceRequest";
 import { recomputeSessionTotals } from "@/lib/session";
+import { deductInventoryForOrder } from "@/lib/inventory";
 
 /**
  * After a session is fully paid: mark BILLED, free tables for the next party,
@@ -13,6 +14,11 @@ export async function settlePaidSession(
   sessionId: Types.ObjectId | string,
   opts?: { closedBy?: Types.ObjectId | string | null }
 ) {
+  const toComplete = await Order.find({
+    sessionId,
+    status: { $nin: ["CANCELLED", "COMPLETED"] },
+  });
+
   await Order.updateMany(
     {
       sessionId,
@@ -20,6 +26,20 @@ export async function settlePaidSession(
     },
     { $set: { status: "COMPLETED", completedAt: new Date() } }
   );
+
+  for (const o of toComplete) {
+    o.status = "COMPLETED";
+    o.completedAt = new Date();
+    await deductInventoryForOrder(o);
+  }
+
+  const completed = await Order.find({
+    sessionId,
+    status: "COMPLETED",
+  });
+  for (const o of completed) {
+    await deductInventoryForOrder(o);
+  }
 
   await recomputeSessionTotals(sessionId);
   const session = await TableSession.findById(sessionId);
@@ -43,14 +63,13 @@ export async function settlePaidSession(
     { $set: { status: "DONE" } }
   );
 
-  // Free tables — same QR remains active for the next guests
   await Table.updateMany(
     {
       _id: { $in: session.tableIds },
       restaurantId: session.restaurantId,
       branchId: session.branchId,
     },
-    { $set: { status: "FREE", currentSessionId: null } }
+    { $set: { status: "CLEANING", currentSessionId: null } }
   );
 
   return session;

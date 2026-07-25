@@ -31,7 +31,7 @@ const UserSchema = new Schema<IUser>(
     passwordHash: { type: String, required: true },
     role: {
       type: String,
-      enum: ["OWNER", "MANAGER", "CASHIER", "WAITER", "CHEF"],
+      enum: ["OWNER", "MANAGER", "CASHIER", "WAITER", "CHEF", "INVENTORY_MANAGER"],
       required: true,
     },
     isActive: { type: Boolean, default: true },

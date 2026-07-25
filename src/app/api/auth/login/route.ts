@@ -34,6 +34,8 @@ export async function POST(req: NextRequest) {
 
     const restaurant = await Restaurant.findById(user.restaurantId).lean<{
       status?: string;
+      billingStatus?: string;
+      trialEndsAt?: Date | null;
     } | null>();
     const status = restaurant?.status ?? "ACTIVE";
     if (status === "SUSPENDED") {
@@ -49,6 +51,15 @@ export async function POST(req: NextRequest) {
         403,
         "This restaurant is not active yet. Ask the platform admin to activate it."
       );
+    }
+
+    const { billingAllowsLogin } = await import("@/lib/billing/limits");
+    const billing = billingAllowsLogin(
+      restaurant?.billingStatus,
+      restaurant?.trialEndsAt ? new Date(restaurant.trialEndsAt) : null
+    );
+    if (!billing.ok) {
+      return error(billing.message, 403, billing.hint);
     }
 
     const payload = buildJwtPayload({

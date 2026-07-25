@@ -16,6 +16,12 @@ interface Summary {
     aovChange: number;
     avgPrepMins: number;
     avgPrepChange: number;
+    expenses?: number;
+    profit?: number;
+    kitchenQueue?: number;
+    lowStock?: number;
+    reservations?: number;
+    attendance?: number;
   };
   hourly: { hour: number; revenue: number }[];
   topItems: { name: string; qty: number }[];
@@ -25,6 +31,7 @@ interface Summary {
     tables: { id: string; number: number; x: number; y: number; status: string }[];
   };
   branchComparison: { id: string; name: string; revenue: number; orders: number }[];
+  insights?: string[];
 }
 
 function Change({ value }: { value: number }) {
@@ -93,34 +100,71 @@ export default function DashboardPage() {
       change: data.kpis.orderCountChange,
     },
     {
-      label: "Avg order value",
-      value: formatMoney(data.kpis.aov),
-      change: data.kpis.aovChange,
+      label: "Profit (rev − expenses)",
+      value: formatMoney(data.kpis.profit ?? 0),
+      change: 0,
     },
     {
-      label: "Avg prep (min)",
-      value: String(data.kpis.avgPrepMins),
-      change: data.kpis.avgPrepChange,
+      label: "Expenses today",
+      value: formatMoney(data.kpis.expenses ?? 0),
+      change: 0,
+    },
+    {
+      label: "Kitchen queue",
+      value: String(data.kpis.kitchenQueue ?? 0),
+      change: 0,
+    },
+    {
+      label: "Low stock SKUs",
+      value: String(data.kpis.lowStock ?? 0),
+      change: 0,
+    },
+    {
+      label: "Reservations",
+      value: String(data.kpis.reservations ?? 0),
+      change: 0,
+    },
+    {
+      label: "Staff present",
+      value: String(data.kpis.attendance ?? 0),
+      change: 0,
     },
   ];
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6 p-4 sm:p-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
         <p className="mt-1 text-sm text-[var(--muted)]">
-          Live numbers for the active branch. Switch branch in the sidebar to prove tenancy.
+          Live branch health — sales, kitchen, inventory, reservations, HR, AI.
         </p>
       </div>
 
+      {data.insights?.length ? (
+        <div className="rounded-[6px] border border-[var(--border)] bg-[var(--surface-2)] p-3 text-sm">
+          <p className="text-xs font-semibold uppercase text-[var(--muted)]">
+            AI insights
+          </p>
+          <ul className="mt-1 space-y-1">
+            {data.insights.map((i) => (
+              <li key={i}>· {i}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {kpis.map((k) => (
-          <Card key={k.label} className="p-4">
+          <Card key={k.label} className="bg-[var(--surface)] p-4">
             <p className="text-xs text-[var(--muted)]">{k.label}</p>
-            <p className="num mt-2 text-3xl font-semibold tracking-tight">{k.value}</p>
-            <div className="mt-2">
-              <Change value={k.change} />
-            </div>
+            <p className="num mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
+              {k.value}
+            </p>
+            {k.change !== 0 ? (
+              <div className="mt-2">
+                <Change value={k.change} />
+              </div>
+            ) : null}
           </Card>
         ))}
       </div>
@@ -209,11 +253,13 @@ export default function DashboardPage() {
                   left: `${(t.x / 600) * 90 + 5}%`,
                   top: `${(t.y / 400) * 70 + 10}%`,
                   background:
-                    t.status === "FREE"
+                    t.status === "FREE" || t.status === "AVAILABLE"
                       ? "var(--success)"
                       : t.status === "OCCUPIED"
                         ? "var(--warn)"
-                        : "var(--accent)",
+                        : t.status === "CLEANING"
+                          ? "#A78BFA"
+                          : "var(--accent)",
                 }}
               />
             ))}

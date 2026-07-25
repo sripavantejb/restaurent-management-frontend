@@ -32,6 +32,14 @@ interface CartState {
   updateQty: (key: string, qty: number) => void;
   setNotes: (key: string, notes: string) => void;
   setDiscount: (type: "flat" | "percent", value: number) => void;
+  replaceCart: (payload: {
+    type: OrderType;
+    tableId: string | null;
+    tableNumber: number | null;
+    lines: CartLine[];
+    discountType: "flat" | "percent";
+    discountValue: number;
+  }) => void;
   clear: () => void;
   subtotal: () => number;
   discountAmount: () => number;
@@ -104,6 +112,15 @@ export const useCart = create<CartState>()(
         }),
       setDiscount: (discountType, discountValue) =>
         set({ discountType, discountValue }),
+      replaceCart: (payload) =>
+        set({
+          type: payload.type,
+          tableId: payload.tableId,
+          tableNumber: payload.tableNumber,
+          lines: payload.lines,
+          discountType: payload.discountType,
+          discountValue: payload.discountValue,
+        }),
       clear: () =>
         set({
           lines: [],

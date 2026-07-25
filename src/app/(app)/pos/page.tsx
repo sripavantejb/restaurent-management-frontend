@@ -11,9 +11,11 @@ import {
   ORDER_TYPE_LABEL,
   PAY_METHOD_LABEL,
   TABLE_STATUS_LABEL,
+  isTableSelectable,
   label,
 } from "@/lib/labels";
 import { calcTax, calcTotal, formatMoney } from "@/lib/money";
+import { printInvoiceText } from "@/lib/print-invoice";
 
 interface Category {
   id: string;
@@ -57,6 +59,28 @@ export default function PosPage() {
   const [payMethod, setPayMethod] = useState<"CASH" | "CARD" | "UPI">("UPI");
   const [tendered, setTendered] = useState("");
   const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
+  /** Mobile-only: Menu vs Bill pane (desktop always shows both). */
+  const [mobilePane, setMobilePane] = useState<"menu" | "bill">("menu");
+  const [heldOpen, setHeldOpen] = useState(false);
+  const [heldBills, setHeldBills] = useState<
+    {
+      id: string;
+      label: string;
+      type: string;
+      tableId: string | null;
+      tableNumber: number | null;
+      lines: {
+        menuItemId: string;
+        name: string;
+        qty: number;
+        unitPrice: number;
+        variant?: string;
+        addons?: string[];
+        notes?: string;
+      }[];
+      discountPaise: number;
+    }[]
+  >([]);
 
   const load = useCallback(async () => {
     if (!activeBranchId) return;
@@ -144,6 +168,8 @@ export default function PosPage() {
     });
     setConfigItem(null);
   }
+
+  const lineCount = cart.lines.reduce((s, l) => s + l.qty, 0);
 
   const subtotal = cart.subtotal();
   const discountAmount = cart.discountAmount();
@@ -243,7 +269,15 @@ export default function PosPage() {
           tenderedAmount: tenderedPaise,
         }),
       });
-      setToast("Payment recorded — table freed");
+      try {
+        const inv = await apiFetch(`/api/orders/${pendingOrderId}/invoice`, {
+          branchId: activeBranchId,
+        });
+        if (inv.printText) printInvoiceText(inv.printText, "Invoice");
+      } catch {
+        /* invoice print is best-effort */
+      }
+      setToast("Payment recorded — table → Cleaning");
       setTimeout(() => setToast(""), 3500);
       setPayOpen(false);
       setPendingOrderId(null);
@@ -256,11 +290,111 @@ export default function PosPage() {
     }
   }
 
+  async function holdBill() {
+    if (!cart.lines.length || !activeBranchId) return;
+    setBusy(true);
+    try {
+      const labelText =
+        cart.type === "DINE_IN" && cart.tableNumber
+          ? `Table ${cart.tableNumber}`
+          : cart.type === "TAKEAWAY"
+            ? "Takeaway hold"
+            : "Held bill";
+      await apiFetch("/api/pos/held", {
+        method: "POST",
+        branchId: activeBranchId,
+        body: JSON.stringify({
+          label: labelText,
+          type: cart.type,
+          tableId: cart.tableId,
+          tableNumber: cart.tableNumber,
+          discountPaise: discountAmount,
+          lines: cart.lines.map((l) => ({
+            menuItemId: l.menuItemId,
+            name: l.name,
+            qty: l.qty,
+            unitPrice: l.unitPrice,
+            variant: l.variant ?? "",
+            addons: l.addons,
+            notes: l.notes,
+          })),
+        }),
+      });
+      cart.clear();
+      setPendingOrderId(null);
+      setToast("Bill held — resume from Held bills");
+      setTimeout(() => setToast(""), 3500);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Hold failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function openHeld() {
+    if (!activeBranchId) return;
+    setBusy(true);
+    try {
+      const data = await apiFetch("/api/pos/held", { branchId: activeBranchId });
+      setHeldBills(data.held ?? []);
+      setHeldOpen(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load held bills");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resumeHeld(id: string) {
+    const bill = heldBills.find((b) => b.id === id);
+    if (!bill || !activeBranchId) return;
+    setBusy(true);
+    try {
+      cart.replaceCart({
+        type: bill.type === "TAKEAWAY" ? "TAKEAWAY" : "DINE_IN",
+        tableId: bill.tableId,
+        tableNumber: bill.tableNumber,
+        discountType: "flat",
+        discountValue: bill.discountPaise ?? 0,
+        lines: bill.lines.map((l) => ({
+          key: [l.menuItemId, l.variant ?? "", (l.addons ?? []).join(","), l.notes ?? ""].join(
+            "|"
+          ),
+          menuItemId: l.menuItemId,
+          name: l.name,
+          qty: l.qty,
+          unitPrice: l.unitPrice,
+          variant: l.variant ?? "",
+          addons: l.addons ?? [],
+          notes: l.notes ?? "",
+          isVeg: true,
+        })),
+      });
+      await apiFetch(`/api/pos/held?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        branchId: activeBranchId,
+      });
+      setHeldOpen(false);
+      setMobilePane("bill");
+      setToast("Held bill resumed");
+      setTimeout(() => setToast(""), 2500);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Resume failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const statusColor: Record<string, string> = {
+    AVAILABLE: "bg-[var(--success)]",
     FREE: "bg-[var(--success)]",
     OCCUPIED: "bg-[var(--warn)]",
+    PREPARING_BILL: "bg-sky-500",
     BILLED: "bg-sky-500",
+    CLEANING: "bg-violet-400",
     RESERVED: "bg-[var(--muted)]",
+    BLOCKED: "bg-red-500",
+    OUT_OF_SERVICE: "bg-neutral-400",
   };
 
   return (
@@ -302,9 +436,38 @@ export default function PosPage() {
         </p>
       ) : null}
 
+      <div className="flex shrink-0 gap-1 border-b border-[var(--border)] p-2 lg:hidden">
+        <button
+          type="button"
+          onClick={() => setMobilePane("menu")}
+          className={`h-10 flex-1 rounded-[6px] text-sm font-medium ${
+            mobilePane === "menu"
+              ? "bg-[var(--ink)] text-white"
+              : "border border-[var(--border)] text-[var(--muted)]"
+          }`}
+        >
+          Menu
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobilePane("bill")}
+          className={`h-10 flex-1 rounded-[6px] text-sm font-medium ${
+            mobilePane === "bill"
+              ? "bg-[var(--ink)] text-white"
+              : "border border-[var(--border)] text-[var(--muted)]"
+          }`}
+        >
+          Bill{lineCount ? ` (${lineCount})` : ""}
+        </button>
+      </div>
+
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         {/* Category rail — horizontal on mobile, vertical on desktop */}
-        <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-[var(--border)] p-2 lg:w-[200px] lg:flex-col lg:overflow-auto lg:border-r lg:border-b-0">
+        <div
+          className={`shrink-0 gap-1 overflow-x-auto border-b border-[var(--border)] p-2 lg:flex lg:w-[200px] lg:flex-col lg:overflow-auto lg:border-r lg:border-b-0 ${
+            mobilePane === "menu" ? "flex" : "hidden lg:flex"
+          }`}
+        >
           <button
             type="button"
             onClick={() => setCatId("all")}
@@ -329,7 +492,11 @@ export default function PosPage() {
         </div>
 
         {/* Menu grid */}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <div
+          className={`min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${
+            mobilePane === "menu" ? "flex" : "hidden lg:flex"
+          }`}
+        >
           <div className="relative border-b border-[var(--border)] p-3">
             <Search
               size={16}
@@ -376,10 +543,21 @@ export default function PosPage() {
               ))
             )}
           </div>
+          {lineCount > 0 ? (
+            <div className="border-t border-[var(--border)] p-3 lg:hidden">
+              <Button className="w-full" onClick={() => setMobilePane("bill")}>
+                View bill · {lineCount} item{lineCount === 1 ? "" : "s"} · {formatMoney(total)}
+              </Button>
+            </div>
+          ) : null}
         </div>
 
         {/* Cart */}
-        <div className="flex max-h-[45vh] w-full shrink-0 flex-col border-t border-[var(--border)] bg-white lg:max-h-none lg:w-[380px] lg:border-t-0 lg:border-l">
+        <div
+          className={`w-full shrink-0 flex-col border-[var(--border)] bg-white lg:flex lg:w-[380px] lg:border-t-0 lg:border-l ${
+            mobilePane === "bill" ? "flex min-h-0 flex-1 border-t-0" : "hidden"
+          }`}
+        >
           <div className="border-b border-[var(--border)] px-4 py-3">
             <h2 className="font-semibold">Current bill</h2>
             <p className="text-xs text-[var(--muted)]">
@@ -505,6 +683,24 @@ export default function PosPage() {
             >
               Bill & Pay
             </Button>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                className="w-full"
+                variant="secondary"
+                disabled={!cart.lines.length || busy}
+                onClick={() => void holdBill()}
+              >
+                Hold bill
+              </Button>
+              <Button
+                className="w-full"
+                variant="secondary"
+                disabled={busy}
+                onClick={() => void openHeld()}
+              >
+                Resume held
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -513,9 +709,9 @@ export default function PosPage() {
         <p className="mb-3 text-sm text-[var(--muted)]">
           Free tables start a new bill. Occupied tables add another round to the open session.
         </p>
-        <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
           {tables.map((t) => {
-            const selectable = t.status === "FREE" || t.status === "OCCUPIED" || t.status === "BILLED";
+            const selectable = isTableSelectable(t.status);
             const selected = t.id === cart.tableId;
             return (
               <button
@@ -647,6 +843,36 @@ export default function PosPage() {
             Confirm payment
           </Button>
         </div>
+      </Modal>
+
+      <Modal open={heldOpen} onClose={() => setHeldOpen(false)} title="Held bills">
+        {heldBills.length === 0 ? (
+          <p className="text-sm text-[var(--muted)]">No held bills for this branch.</p>
+        ) : (
+          <ul className="space-y-2">
+            {heldBills.map((b) => (
+              <li
+                key={b.id}
+                className="flex items-center justify-between gap-3 rounded-[6px] border border-[var(--border)] p-3"
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-medium">{b.label}</p>
+                  <p className="text-xs text-[var(--muted)]">
+                    {b.lines.length} line(s)
+                    {b.tableNumber != null ? ` · Table ${b.tableNumber}` : ""}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => void resumeHeld(b.id)}
+                >
+                  Resume
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
       </Modal>
     </div>
   );

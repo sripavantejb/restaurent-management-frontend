@@ -198,7 +198,35 @@ export default function StaffPage() {
           <div className="border-b border-[var(--border)] px-4 py-3 text-xs font-semibold tracking-wide text-[var(--muted)] uppercase">
             Performance · {days}d
           </div>
-          <div className="overflow-auto">
+          <div className="space-y-2 p-3 sm:hidden">
+            {perf.length === 0 ? (
+              <p className="py-6 text-center text-sm text-[var(--muted)]">
+                No waiter orders in this window yet.
+              </p>
+            ) : (
+              perf.map((w) => (
+                <div
+                  key={w.id}
+                  className="rounded-[6px] border border-[var(--border)] p-3"
+                >
+                  <p className="font-medium">
+                    {w.name}
+                    {!w.isActive ? (
+                      <span className="ml-2 text-xs font-normal text-[var(--muted)]">
+                        inactive
+                      </span>
+                    ) : null}
+                  </p>
+                  <div className="mt-2 flex justify-between text-sm text-[var(--muted)]">
+                    <span className="num">{w.orders} orders</span>
+                    <span className="num">{formatMoney(w.revenue)}</span>
+                    <span className="num">avg {formatMoney(w.avgTicket)}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          <div className="hidden overflow-auto sm:block">
             <table className="w-full text-left text-sm">
               <thead className="bg-[var(--surface-2)] text-xs text-[var(--muted)]">
                 <tr>
