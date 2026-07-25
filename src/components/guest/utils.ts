@@ -1,3 +1,4 @@
+import gsap from "gsap";
 import type { MenuItem } from "./types";
 
 const DEVICE_KEY = "ros_guest_device";
@@ -37,11 +38,27 @@ export function prefersReducedMotion(): boolean {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-export function statusTone(status: string): "placed" | "cooking" | "ready" | "served" | "muted" {
+/** GSAP from() only when matching nodes exist (avoids "target not found" noise). */
+export function gsapFromIf(
+  scope: Element | null | undefined,
+  selector: string,
+  vars: gsap.TweenVars
+) {
+  if (!scope) return;
+  const targets = gsap.utils.toArray(selector, scope);
+  if (!targets.length) return;
+  gsap.from(targets, vars);
+}
+
+export function statusTone(
+  status: string
+): "placed" | "cooking" | "ready" | "served" | "muted" {
   const s = status.toUpperCase();
   if (s === "DRAFT" || s === "CANCELLED" || s === "REJECTED") return "muted";
-  if (s === "PLACED" || s === "PENDING" || s === "NEW" || s === "QUEUED") return "placed";
-  if (s === "COOKING" || s === "PREPARING" || s === "IN_PROGRESS") return "cooking";
+  if (s === "PLACED" || s === "PENDING" || s === "NEW" || s === "QUEUED")
+    return "placed";
+  if (s === "COOKING" || s === "PREPARING" || s === "IN_PROGRESS")
+    return "cooking";
   if (s === "READY") return "ready";
   if (s === "SERVED" || s === "COMPLETED" || s === "DELIVERED") return "served";
   return "muted";

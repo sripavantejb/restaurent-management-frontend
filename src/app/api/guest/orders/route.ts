@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { cookies } from "next/headers";
+import mongoose from "mongoose";
 import { TableSession } from "@/models/TableSession";
 import { GuestCart } from "@/models/GuestCart";
 import { MenuItem } from "@/models/MenuItem";
@@ -8,7 +9,11 @@ import { Restaurant } from "@/models/Restaurant";
 import { Branch } from "@/models/Branch";
 import { QRScan } from "@/models/QRScan";
 import { withGuest, guestError, guestJson } from "@/lib/guest-api";
-import { lineUnitPrice, recomputeSessionTotals, validateOrderMoney } from "@/lib/session";
+import {
+  lineUnitPrice,
+  recomputeSessionTotals,
+  validateOrderMoney,
+} from "@/lib/session";
 
 const GUEST_COOKIE = "ros_guest";
 
@@ -16,15 +21,29 @@ const PlaceSchema = z.object({
   idempotencyKey: z.string().min(8),
 });
 
+function isDupKey(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code?: number }).code === 11000
+  );
+}
+
 export const POST = withGuest(async (req) => {
   const jar = await cookies();
   const raw = jar.get(GUEST_COOKIE)?.value;
   if (!raw) return guestError("No guest session", 401);
-  const ctx = JSON.parse(raw) as {
+  let ctx: {
     sessionId: string;
     deviceId: string;
     guestLabel: string;
   };
+  try {
+    ctx = JSON.parse(raw);
+  } catch {
+    return guestError("Invalid guest session", 401, "Scan the table QR again.");
+  }
 
   try {
     const body = PlaceSchema.parse(await req.json());
@@ -58,7 +77,6 @@ export const POST = withGuest(async (req) => {
       });
     }
 
-    // Rate: max 3 orders / 5 min
     const recent = await Order.countDocuments({
       restaurantId: session.restaurantId,
       branchId: session.branchId,
@@ -79,7 +97,11 @@ export const POST = withGuest(async (req) => {
       branchId: session.branchId,
     });
     if (!cart || cart.lines.length === 0) {
-      return guestError("Cart is empty", 400, "Add items before placing a round.");
+      return guestError(
+        "Cart is empty",
+        400,
+        "Add items before placing a round."
+      );
     }
 
     const restaurant = await Restaurant.findById(session.restaurantId);
@@ -95,7 +117,7 @@ export const POST = withGuest(async (req) => {
     }
 
     const menuItems = await MenuItem.find({
-      _id: { $in: cart.lines.map((l: { menuItemId: unknown }) => l.menuItemId) },
+      _id: { $in: cart.lines.map((l) => l.menuItemId) },
       restaurantId: session.restaurantId,
       branchId: session.branchId,
     });
@@ -116,22 +138,26 @@ export const POST = withGuest(async (req) => {
       const item = map.get(line.menuItemId.toString());
       if (!item || !item.isAvailable) {
         return guestError(
-          `${line.name} is currently unavailable`,
+          `${line.name || "An item"} is currently unavailable`,
           400,
           "Remove it from the cart and try again."
         );
       }
-      const unitPrice = lineUnitPrice(item, line.variant, line.addons);
+      const unitPrice = lineUnitPrice(
+        item,
+        line.variant || "",
+        line.addons || []
+      );
       orderLines.push({
         menuItemId: item._id,
         name: item.name,
         qty: line.qty,
         unitPrice,
-        variant: line.variant,
-        addons: line.addons,
-        notes: line.notes,
+        variant: line.variant || "",
+        addons: line.addons || [],
+        notes: line.notes || "",
         status: "QUEUED" as const,
-        guestLabel: line.guestLabel,
+        guestLabel: line.guestLabel || ctx.guestLabel || "Guest",
       });
     }
 
@@ -144,7 +170,6 @@ export const POST = withGuest(async (req) => {
       );
     }
 
-    // Duplicate warning: identical items under 2 minutes
     const twoMinAgo = new Date(Date.now() - 2 * 60 * 1000);
     const last = await Order.findOne({
       restaurantId: session.restaurantId,
@@ -158,12 +183,17 @@ export const POST = withGuest(async (req) => {
         orderLines.map((l) => `${l.name}|${l.qty}|${l.variant}`).sort()
       );
       const b = JSON.stringify(
-        last.items.map((l: { name: string; qty: number; variant?: string }) => `${l.name}|${l.qty}|${l.variant}`).sort()
+        last.items
+          .map(
+            (l: { name: string; qty: number; variant?: string }) =>
+              `${l.name}|${l.qty}|${l.variant}`
+          )
+          .sort()
       );
       duplicateWarning = a === b;
     }
 
-    const roundNumber = session.rounds + 1;
+    const roundNumber = (Number(session.rounds) || 0) + 1;
     const count = await Order.countDocuments({
       restaurantId: session.restaurantId,
       branchId: session.branchId,
@@ -171,26 +201,55 @@ export const POST = withGuest(async (req) => {
     const orderNumber = `${branch.code}-${String(count + 1).padStart(4, "0")}`;
     const approvalMode = restaurant.qrApprovalMode === true;
 
-    const order = await Order.create({
+    const orderPayload = {
       restaurantId: session.restaurantId,
       branchId: session.branchId,
       orderNumber,
-      type: "DINE_IN",
-      tableId: session.tableIds[0],
+      type: "DINE_IN" as const,
+      tableId: session.tableIds[0] ?? null,
       sessionId: session._id,
       roundNumber,
-      placedBy: "GUEST",
-      guestDeviceId: ctx.deviceId,
+      placedBy: "GUEST" as const,
+      guestDeviceId: ctx.deviceId || "",
       idempotencyKey: headerKey,
-      approvalStatus: approvalMode ? "PENDING" : "NONE",
-      status: approvalMode ? "DRAFT" : "PLACED",
+      approvalStatus: (approvalMode ? "PENDING" : "NONE") as
+        | "PENDING"
+        | "NONE",
+      status: (approvalMode ? "DRAFT" : "PLACED") as "DRAFT" | "PLACED",
       items: orderLines,
       ...money,
       placedAt: new Date(),
-    });
+    };
 
-    // If not approval mode, goes straight to kitchen as PLACED
-    if (!approvalMode) {
+    let order;
+    try {
+      order = await Order.create(orderPayload);
+    } catch (createErr) {
+      if (isDupKey(createErr)) {
+        const again = await Order.findOne({
+          restaurantId: session.restaurantId,
+          branchId: session.branchId,
+          idempotencyKey: headerKey,
+        });
+        if (again) {
+          return guestJson({
+            id: again._id.toString(),
+            orderNumber: again.orderNumber,
+            roundNumber: again.roundNumber,
+            total: again.total,
+            duplicate: true,
+          });
+        }
+        order = await Order.create({
+          ...orderPayload,
+          orderNumber: `${orderNumber}-${Date.now().toString(36).slice(-4)}`,
+        });
+      } else {
+        throw createErr;
+      }
+    }
+
+    if (!approvalMode && order.status !== "PLACED") {
       order.status = "PLACED";
       await order.save();
     }
@@ -202,22 +261,26 @@ export const POST = withGuest(async (req) => {
     await session.save();
     await recomputeSessionTotals(session._id);
 
-    await QRScan.updateMany(
-      {
-        restaurantId: session.restaurantId,
-        branchId: session.branchId,
-        deviceHash: ctx.deviceId,
-        convertedToOrder: false,
-      },
-      {
-        $set: {
-          convertedToOrder: true,
-          orderId: order._id,
-          sessionId: session._id,
-          firstItemAt: new Date(),
+    try {
+      await QRScan.updateMany(
+        {
+          restaurantId: session.restaurantId,
+          branchId: session.branchId,
+          deviceHash: ctx.deviceId,
+          convertedToOrder: false,
         },
-      }
-    );
+        {
+          $set: {
+            convertedToOrder: true,
+            orderId: order._id,
+            sessionId: session._id,
+            firstItemAt: new Date(),
+          },
+        }
+      );
+    } catch (scanErr) {
+      console.error("[guest-orders] QRScan update skipped", scanErr);
+    }
 
     return guestJson(
       {
@@ -235,6 +298,13 @@ export const POST = withGuest(async (req) => {
   } catch (err) {
     if (err instanceof z.ZodError) {
       return guestError("Invalid order", 400, err.errors[0]?.message);
+    }
+    if (err instanceof mongoose.Error.ValidationError) {
+      return guestError(
+        "Order could not be saved",
+        400,
+        Object.values(err.errors)[0]?.message || "Check items and try again."
+      );
     }
     throw err;
   }

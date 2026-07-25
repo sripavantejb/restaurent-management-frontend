@@ -5,7 +5,7 @@ import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { formatMoney } from "@/lib/money";
 import type { MenuItem } from "./types";
-import { linePrice, prefersReducedMotion } from "./utils";
+import { linePrice, prefersReducedMotion, gsapFromIf } from "./utils";
 import styles from "./guest-theme.module.css";
 
 gsap.registerPlugin(useGSAP);
@@ -42,13 +42,15 @@ export function GuestItemSheet({
   useGSAP(
     () => {
       if (prefersReducedMotion()) return;
-      gsap.from(".g-sheet-panel", {
+      gsapFromIf(root.current, ".g-sheet-panel", {
         y: 40,
         opacity: 0.6,
         duration: 0.32,
         ease: "power2.out",
       });
-      gsap.from(root.current, { opacity: 0, duration: 0.2 });
+      if (root.current) {
+        gsap.from(root.current, { opacity: 0, duration: 0.2 });
+      }
     },
     { scope: root }
   );

@@ -5,7 +5,7 @@ import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { formatMoney } from "@/lib/money";
 import type { CartLine } from "./types";
-import { prefersReducedMotion } from "./utils";
+import { prefersReducedMotion, gsapFromIf } from "./utils";
 import styles from "./guest-theme.module.css";
 
 gsap.registerPlugin(useGSAP);
@@ -37,13 +37,15 @@ export function GuestCartSheet({
   useGSAP(
     () => {
       if (prefersReducedMotion()) return;
-      gsap.from(".g-cart-panel", {
+      gsapFromIf(root.current, ".g-cart-panel", {
         y: 40,
         opacity: 0.6,
         duration: 0.32,
         ease: "power2.out",
       });
-      gsap.from(root.current, { opacity: 0, duration: 0.2 });
+      if (root.current) {
+        gsap.from(root.current, { opacity: 0, duration: 0.2 });
+      }
     },
     { scope: root }
   );

@@ -5,7 +5,7 @@ import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { formatMoney } from "@/lib/money";
 import type { Category, MenuItem } from "./types";
-import { prefersReducedMotion } from "./utils";
+import { prefersReducedMotion, gsapFromIf } from "./utils";
 import styles from "./guest-theme.module.css";
 
 gsap.registerPlugin(useGSAP);
@@ -37,8 +37,8 @@ export function GuestMenu({
 
   useGSAP(
     () => {
-      if (prefersReducedMotion()) return;
-      gsap.from(".g-menu-item", {
+      if (prefersReducedMotion() || items.length === 0) return;
+      gsapFromIf(root.current, ".g-menu-item", {
         y: 10,
         opacity: 0,
         duration: 0.28,

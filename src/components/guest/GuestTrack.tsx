@@ -14,7 +14,7 @@ import {
   type ServiceType,
 } from "@/lib/labels";
 import type { CheckoutData, CheckoutRound, MenuItem } from "./types";
-import { prefersReducedMotion, statusTone } from "./utils";
+import { prefersReducedMotion, gsapFromIf, statusTone } from "./utils";
 import styles from "./guest-theme.module.css";
 
 gsap.registerPlugin(useGSAP);
@@ -127,8 +127,8 @@ export function GuestTrack({
 
   useGSAP(
     () => {
-      if (prefersReducedMotion()) return;
-      gsap.from(".g-round", {
+      if (prefersReducedMotion() || rounds.length === 0) return;
+      gsapFromIf(root.current, ".g-round", {
         y: 12,
         opacity: 0,
         duration: 0.35,

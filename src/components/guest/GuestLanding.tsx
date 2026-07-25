@@ -4,7 +4,7 @@ import { useRef } from "react";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import type { Bootstrap } from "./types";
-import { prefersReducedMotion } from "./utils";
+import { prefersReducedMotion, gsapFromIf } from "./utils";
 import styles from "./guest-theme.module.css";
 
 gsap.registerPlugin(useGSAP);
@@ -41,7 +41,7 @@ export function GuestLanding({
   useGSAP(
     () => {
       if (prefersReducedMotion()) return;
-      gsap.from(".g-land-hero > *", {
+      gsapFromIf(root.current, ".g-land-hero > *", {
         y: 18,
         opacity: 0,
         duration: 0.55,

@@ -20,8 +20,13 @@ function injectTenantFilter(
   const opts = this.getOptions?.() ?? {};
   if (opts.skipTenant || !tenant) return;
   const filter = this.getFilter();
-  filter.restaurantId = tenant.restaurantId;
-  filter.branchId = tenant.branchId;
+  // Never overwrite explicit tenant ids (guest APIs + concurrent serverless requests).
+  if (filter.restaurantId === undefined) {
+    filter.restaurantId = tenant.restaurantId;
+  }
+  if (filter.branchId === undefined) {
+    filter.branchId = tenant.branchId;
+  }
 }
 
 /**

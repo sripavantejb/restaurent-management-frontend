@@ -45,6 +45,10 @@ export function withGuest(handler: GuestHandler, opts?: { limit?: number }) {
     routeCtx: { params: Promise<Record<string, string>> }
   ) => {
     try {
+      // Isolate from staff `withAuth` tenant on warm serverless instances.
+      const { clearRequestTenant } = await import("./tenant");
+      clearRequestTenant();
+
       await connectDb();
       const ip =
         req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
@@ -61,12 +65,21 @@ export function withGuest(handler: GuestHandler, opts?: { limit?: number }) {
       const params = routeCtx?.params ? await routeCtx.params : {};
       return await handler(req, { params });
     } catch (err) {
-      console.error(err);
+      console.error("[guest-api]", err);
+      const detail =
+        err instanceof Error ? err.message : "Unknown server error";
       return guestError(
         "Something went wrong",
         500,
-        "Please ask staff for help. Your order was not placed."
+        `Please ask staff for help. Your order was not placed. (${detail})`
       );
+    } finally {
+      try {
+        const { clearRequestTenant } = await import("./tenant");
+        clearRequestTenant();
+      } catch {
+        /* ignore */
+      }
     }
   };
 }
