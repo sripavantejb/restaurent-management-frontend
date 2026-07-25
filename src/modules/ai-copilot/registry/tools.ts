@@ -7,6 +7,7 @@ import * as Kitchen from "../services/kitchen.service";
 import * as Finance from "../services/finance.service";
 import * as Forecast from "../services/forecast.service";
 import * as Actions from "../services/actions.service";
+import * as Rag from "../rag/uploads";
 
 const emptyParams = {
   type: "object" as const,
@@ -569,6 +570,55 @@ export const AI_TOOLS: AiToolDefinition[] = [
       required: ["name"],
     },
     handler: (ctx, args) => Actions.createDiscountNote(ctx, args),
+  }),
+  tool({
+    name: "searchKnowledge",
+    description:
+      "Semantic/keyword search over indexed restaurant knowledge: menu, recipes, inventory notes, restaurant policies, and uploaded SOPs. Use for allergens, prep, policies, SOP questions — not for live sales numbers.",
+    permissions: ["ai.use"],
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Natural language question" },
+        sourceTypes: {
+          type: "array",
+          items: {
+            type: "string",
+            enum: ["MENU_ITEM", "RECIPE", "INVENTORY", "RESTAURANT", "UPLOAD"],
+          },
+          description: "Optional filter of source types",
+        },
+        topK: {
+          type: "number",
+          description: "Max snippets (1–20, default 6)",
+        },
+      },
+      required: ["query"],
+    },
+    handler: (ctx, args) => Rag.searchKnowledgeTool(ctx, args),
+  }),
+  tool({
+    name: "reindexKnowledge",
+    description:
+      "Rebuild RAG index from live menu, recipes, inventory, and restaurant settings (OWNER/MANAGER). Does not delete uploaded SOPs.",
+    permissions: ["ai.use"],
+    isAction: true,
+    handler: (ctx, args) => Rag.reindexKnowledgeTool(ctx, args),
+  }),
+  tool({
+    name: "listKnowledgeDocs",
+    description: "List indexed knowledge documents and sync status",
+    permissions: ["ai.use"],
+    parameters: {
+      type: "object",
+      properties: {
+        uploadsOnly: {
+          type: "boolean",
+          description: "If true, only list uploaded SOPs",
+        },
+      },
+    },
+    handler: (ctx, args) => Rag.listKnowledgeDocsTool(ctx, args),
   }),
 ];
 

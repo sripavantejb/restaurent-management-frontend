@@ -1,15 +1,22 @@
 import { COPILOT_SYSTEM_PROMPT } from "../prompts";
 import type { AiToolDefinition } from "../types";
 import { toolsForOpenAI } from "../registry/tools";
+import {
+  chatCompletionsUrl,
+  chatModelName,
+  hasLlmKey,
+  llmApiKey,
+  llmProvider,
+  nvidiaChatExtras,
+} from "./llm-config";
 
-const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
-
+/** @deprecated use hasLlmKey — kept for call sites */
 export function hasOpenAiKey() {
-  return Boolean(process.env.OPENAI_API_KEY?.trim());
+  return hasLlmKey();
 }
 
 export function modelName() {
-  return process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini";
+  return chatModelName();
 }
 
 export interface ChatMsg {
@@ -33,7 +40,9 @@ export async function runOpenAiWithTools(input: {
     args: Record<string, unknown>
   ) => Promise<{ summary: string; payload: unknown }>;
 }): Promise<{ text: string; toolNames: string[] }> {
-  const key = process.env.OPENAI_API_KEY!;
+  const key = llmApiKey();
+  if (!key) throw new Error("Missing NVIDIA_API_KEY or OPENAI_API_KEY");
+
   const toolNames: string[] = [];
   let messages: ChatMsg[] = [
     { role: "system", content: COPILOT_SYSTEM_PROMPT },
@@ -41,24 +50,28 @@ export async function runOpenAiWithTools(input: {
   ];
 
   for (let round = 0; round < 3; round++) {
-    const res = await fetch(OPENAI_URL, {
+    const res = await fetch(chatCompletionsUrl(), {
       method: "POST",
       headers: {
         Authorization: `Bearer ${key}`,
         "Content-Type": "application/json",
+        Accept: "application/json",
       },
       body: JSON.stringify({
-        model: modelName(),
+        model: chatModelName(),
         messages,
         tools: toolsForOpenAI(input.tools),
         tool_choice: "auto",
-        temperature: 0.2,
+        temperature: llmProvider() === "nvidia" ? 0.6 : 0.2,
+        ...(llmProvider() === "nvidia"
+          ? { max_tokens: 4096, ...nvidiaChatExtras() }
+          : {}),
       }),
     });
 
     if (!res.ok) {
       const errText = await res.text();
-      throw new Error(`OpenAI error ${res.status}: ${errText.slice(0, 200)}`);
+      throw new Error(`LLM error ${res.status}: ${errText.slice(0, 280)}`);
     }
 
     const data = (await res.json()) as {
@@ -75,7 +88,7 @@ export async function runOpenAiWithTools(input: {
     };
 
     const msg = data.choices[0]?.message;
-    if (!msg) throw new Error("Empty OpenAI response");
+    if (!msg) throw new Error("Empty LLM response");
 
     if (msg.tool_calls?.length) {
       messages.push({
@@ -113,32 +126,38 @@ export async function runOpenAiWithTools(input: {
   };
 }
 
-/** Stream token deltas from OpenAI after tools already resolved (final answer only). */
+/** Stream token deltas after tools already resolved (final answer only). */
 export async function streamOpenAiFinal(input: {
   messages: ChatMsg[];
   onDelta: (text: string) => void;
 }): Promise<string> {
-  const key = process.env.OPENAI_API_KEY!;
-  const res = await fetch(OPENAI_URL, {
+  const key = llmApiKey();
+  if (!key) throw new Error("Missing NVIDIA_API_KEY or OPENAI_API_KEY");
+
+  const res = await fetch(chatCompletionsUrl(), {
     method: "POST",
     headers: {
       Authorization: `Bearer ${key}`,
       "Content-Type": "application/json",
+      Accept: "application/json",
     },
     body: JSON.stringify({
-      model: modelName(),
+      model: chatModelName(),
       messages: [
         { role: "system", content: COPILOT_SYSTEM_PROMPT },
         ...input.messages,
       ],
       stream: true,
-      temperature: 0.3,
+      temperature: llmProvider() === "nvidia" ? 0.6 : 0.3,
+      ...(llmProvider() === "nvidia"
+        ? { max_tokens: 4096, ...nvidiaChatExtras() }
+        : {}),
     }),
   });
 
   if (!res.ok || !res.body) {
     const t = await res.text();
-    throw new Error(`OpenAI stream error: ${t.slice(0, 200)}`);
+    throw new Error(`LLM stream error: ${t.slice(0, 280)}`);
   }
 
   const reader = res.body.getReader();

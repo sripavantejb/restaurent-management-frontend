@@ -57,6 +57,20 @@ export function detectIntentTools(message: string): string[] {
   if (/gst.?report/.test(q)) push("generateGSTReport");
   if (/inventory.?report/.test(q)) push("generateInventoryReport");
 
+  if (
+    /allergen|sop|policy|policies|recipe|prep|how do we|knowledge|fssai|business hours|wifi|menu item.*contain/.test(
+      q
+    )
+  ) {
+    push("searchKnowledge");
+  }
+  if (/reindex.*knowledge|index.*knowledge|rebuild.*rag/.test(q)) {
+    push("reindexKnowledge");
+  }
+  if (/list.*knowledge|knowledge.?docs/.test(q)) {
+    push("listKnowledgeDocs");
+  }
+
   if (tools.length === 0) {
     push("getAiInsights");
     push("getTodaySales");

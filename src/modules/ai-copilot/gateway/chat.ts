@@ -141,16 +141,20 @@ export async function handleCopilotChat(input: {
       allowed.some((t) => t.name === n)
     );
     for (const name of names) {
-      await runOne(name, {});
+      const args =
+        name === "searchKnowledge" ? { query: message, topK: 6 } : {};
+      await runOne(name, args);
     }
     const text = [
       "### Summary",
       toolSummaries.join("\n\n") || "No tools matched your permissions.",
       "",
       "### Notes",
+      process.env.NVIDIA_API_KEY ||
+      process.env.NGC_API_KEY ||
       process.env.OPENAI_API_KEY
         ? ""
-        : "_Running in local tool mode (set OPENAI_API_KEY for full LLM reasoning)._",
+        : "_Running in local tool mode (set NVIDIA_API_KEY or OPENAI_API_KEY for full LLM reasoning)._",
       "",
       "### Suggested follow-ups",
       "- What are today's sales?",

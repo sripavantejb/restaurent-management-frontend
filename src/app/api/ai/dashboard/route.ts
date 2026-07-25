@@ -45,6 +45,16 @@ export const GET = withAuth(async ({ tenant, user }) => {
       profitBlocks: profit?.blocks ?? [],
     },
     suggestions: SUGGESTED_PROMPTS,
-    openaiConfigured: Boolean(process.env.OPENAI_API_KEY?.trim()),
+    openaiConfigured: Boolean(
+      process.env.NVIDIA_API_KEY?.trim() ||
+        process.env.NGC_API_KEY?.trim() ||
+        process.env.OPENAI_API_KEY?.trim()
+    ),
+    llmProvider: process.env.NVIDIA_API_KEY?.trim() ||
+      process.env.NGC_API_KEY?.trim()
+      ? "nvidia"
+      : process.env.OPENAI_API_KEY?.trim()
+        ? "openai"
+        : "none",
   });
 }, "ai.use");

@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bot,
+  BookOpen,
   Mic,
   Pin,
   Plus,
+  RefreshCw,
   Search,
   Send,
   Sparkles,
@@ -45,6 +47,7 @@ type Dash = {
     profitSummary: string | null;
   };
   openaiConfigured: boolean;
+  llmProvider?: "nvidia" | "openai" | "none";
   suggestions: string[];
 };
 
@@ -202,9 +205,20 @@ function renderMarkdownLite(text: string) {
   });
 }
 
+type KnowledgeDoc = {
+  id: string;
+  title: string;
+  sourceType: string;
+  status: string;
+  chunkCount: number;
+  updatedAt?: string | null;
+};
+
 export default function AiCopilotPage() {
-  const { activeBranchId, hasPermission } = useAuth();
+  const { activeBranchId, hasPermission, user } = useAuth();
   const canUse = hasPermission("ai.use");
+  const canManageKnowledge =
+    user?.role === "OWNER" || user?.role === "MANAGER";
   const [dash, setDash] = useState<Dash | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -213,6 +227,11 @@ export default function AiCopilotPage() {
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
+  const [knowledgeDocs, setKnowledgeDocs] = useState<KnowledgeDoc[]>([]);
+  const [sopTitle, setSopTitle] = useState("");
+  const [sopContent, setSopContent] = useState("");
+  const [knowledgeBusy, setKnowledgeBusy] = useState(false);
+  const [knowledgeMsg, setKnowledgeMsg] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
 
@@ -237,10 +256,23 @@ export default function AiCopilotPage() {
     setConversations(data.conversations ?? []);
   }, [activeBranchId, canUse, search]);
 
+  const loadKnowledge = useCallback(async () => {
+    if (!activeBranchId || !canUse) return;
+    try {
+      const data = await apiFetch("/api/ai/rag/docs?uploadsOnly=1", {
+        branchId: activeBranchId,
+      });
+      setKnowledgeDocs(data.docs ?? []);
+    } catch {
+      /* panel is best-effort */
+    }
+  }, [activeBranchId, canUse]);
+
   useEffect(() => {
     void loadDash();
     void loadConversations();
-  }, [loadDash, loadConversations]);
+    void loadKnowledge();
+  }, [loadDash, loadConversations, loadKnowledge]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -409,6 +441,74 @@ export default function AiCopilotPage() {
     void loadConversations();
   }
 
+  async function reindexKnowledge() {
+    if (!activeBranchId || !canManageKnowledge) return;
+    setKnowledgeBusy(true);
+    setKnowledgeMsg("");
+    try {
+      const data = await apiFetch("/api/ai/rag/reindex", {
+        method: "POST",
+        branchId: activeBranchId,
+        body: "{}",
+      });
+      const r = data.result;
+      setKnowledgeMsg(
+        `Indexed menu ${r?.menu?.total ?? 0}, recipes ${r?.recipes?.total ?? 0}, inventory ${r?.inventory?.total ?? 0}. Embeddings ${
+          r?.embeddingsEnabled ? "on" : "off"
+        }.`
+      );
+      await loadKnowledge();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Reindex failed");
+    } finally {
+      setKnowledgeBusy(false);
+    }
+  }
+
+  async function uploadSop() {
+    if (!activeBranchId || !canManageKnowledge) return;
+    if (!sopTitle.trim() || !sopContent.trim()) {
+      setKnowledgeMsg("Title and content required");
+      return;
+    }
+    setKnowledgeBusy(true);
+    setKnowledgeMsg("");
+    try {
+      await apiFetch("/api/ai/rag/docs", {
+        method: "POST",
+        branchId: activeBranchId,
+        body: JSON.stringify({
+          title: sopTitle.trim(),
+          content: sopContent.trim(),
+        }),
+      });
+      setSopTitle("");
+      setSopContent("");
+      setKnowledgeMsg("SOP uploaded and indexed.");
+      await loadKnowledge();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setKnowledgeBusy(false);
+    }
+  }
+
+  async function deleteSop(id: string) {
+    if (!activeBranchId || !canManageKnowledge) return;
+    setKnowledgeBusy(true);
+    try {
+      await apiFetch(`/api/ai/rag/docs/${id}`, {
+        method: "DELETE",
+        branchId: activeBranchId,
+      });
+      await loadKnowledge();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setKnowledgeBusy(false);
+    }
+  }
+
   const salesKpis = useMemo(() => {
     if (!dash?.widgets.sales) return [];
     const s = dash.widgets.sales;
@@ -515,8 +615,10 @@ export default function AiCopilotPage() {
               <p className="text-xs text-[var(--muted)]">
                 Tools → business services → MongoDB. LLM never queries the DB.
                 {dash && !dash.openaiConfigured
-                  ? " · Local tool mode (add OPENAI_API_KEY for full LLM)."
-                  : " · OpenAI connected."}
+                  ? " · Local tool mode (add NVIDIA_API_KEY or OPENAI_API_KEY)."
+                  : dash?.llmProvider === "nvidia"
+                    ? " · NVIDIA NIM connected."
+                    : " · OpenAI connected."}
               </p>
             </div>
           </div>
@@ -650,6 +752,105 @@ export default function AiCopilotPage() {
           </form>
         </div>
       </div>
+
+      {/* Knowledge panel */}
+      <aside className="flex w-full shrink-0 flex-col border-t border-[var(--border)] lg:w-72 lg:border-t-0 lg:border-l">
+        <div className="flex items-center gap-2 border-b border-[var(--border)] p-3">
+          <BookOpen size={16} className="text-[var(--accent)]" />
+          <span className="text-sm font-semibold">Knowledge</span>
+        </div>
+        <div className="space-y-3 overflow-auto p-3 text-sm">
+          <p className="text-xs text-[var(--muted)]">
+            Mongo RAG over menu, recipes, inventory, settings, and uploaded
+            SOPs. Ask the copilot allergen/policy questions after reindexing.
+          </p>
+          {canManageKnowledge ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={knowledgeBusy}
+              className="w-full"
+              onClick={() => void reindexKnowledge()}
+            >
+              <RefreshCw size={14} className="mr-1" />
+              {knowledgeBusy ? "Working…" : "Reindex from DB"}
+            </Button>
+          ) : (
+            <p className="text-xs text-[var(--muted)]">
+              Owner/Manager can reindex and upload SOPs.
+            </p>
+          )}
+          {knowledgeMsg ? (
+            <p className="rounded-[6px] border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1.5 text-xs text-[var(--muted)]">
+              {knowledgeMsg}
+            </p>
+          ) : null}
+
+          {canManageKnowledge ? (
+            <div className="space-y-2 border-t border-[var(--border)] pt-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
+                Upload SOP
+              </p>
+              <Input
+                placeholder="Title"
+                value={sopTitle}
+                onChange={(e) => setSopTitle(e.target.value)}
+              />
+              <textarea
+                className="min-h-[88px] w-full resize-y rounded-[6px] border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-xs outline-none focus:border-[var(--accent)]"
+                placeholder="Paste policy / SOP text (markdown ok)"
+                value={sopContent}
+                onChange={(e) => setSopContent(e.target.value)}
+              />
+              <Button
+                size="sm"
+                disabled={knowledgeBusy}
+                className="w-full"
+                onClick={() => void uploadSop()}
+              >
+                Save to knowledge
+              </Button>
+            </div>
+          ) : null}
+
+          <div className="border-t border-[var(--border)] pt-3">
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
+              Uploads
+            </p>
+            {knowledgeDocs.length === 0 ? (
+              <p className="text-xs text-[var(--muted)]">No uploads yet.</p>
+            ) : (
+              <ul className="space-y-2">
+                {knowledgeDocs.map((d) => (
+                  <li
+                    key={d.id}
+                    className="rounded-[6px] border border-[var(--border)] px-2 py-1.5"
+                  >
+                    <div className="flex items-start gap-1">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-medium">{d.title}</p>
+                        <p className="text-[10px] text-[var(--muted)]">
+                          {d.status} · {d.chunkCount} chunks
+                        </p>
+                      </div>
+                      {canManageKnowledge ? (
+                        <button
+                          type="button"
+                          className="text-[var(--muted)] hover:text-red-600"
+                          aria-label="Delete upload"
+                          onClick={() => void deleteSop(d.id)}
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      ) : null}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </aside>
     </div>
   );
 }
