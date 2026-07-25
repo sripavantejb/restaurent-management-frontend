@@ -60,14 +60,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     const data = await res.json();
+    if (!data.user) {
+      setUser(null);
+      setRestaurant(null);
+      setBranches([]);
+      setLoading(false);
+      return;
+    }
     setUser(data.user);
     setRestaurant(data.restaurant);
-    setBranches(data.branches);
+    setBranches(data.branches ?? []);
     const stored =
       typeof window !== "undefined" ? localStorage.getItem(BRANCH_KEY) : null;
     const canSwitch = data.user.permissions.includes("branch.switch");
     const next =
-      (canSwitch && stored && data.branches.some((b: BranchInfo) => b.id === stored)
+      (canSwitch &&
+      stored &&
+      data.branches.some((b: BranchInfo) => b.id === stored)
         ? stored
         : null) || data.user.branchId;
     setActiveBranchIdState(next);

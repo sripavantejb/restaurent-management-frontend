@@ -8,8 +8,10 @@ const PLATFORM_COOKIE = "ros_platform_token";
 const PUBLIC_EXACT = [
   "/login",
   "/api/auth/login",
+  "/api/auth/me",
   "/admin/login",
   "/api/platform/auth/login",
+  "/api/platform/auth/me",
   "/api/billing/webhook",
   "/api/billing/plans",
 ];

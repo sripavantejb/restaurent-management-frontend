@@ -10,10 +10,22 @@ export async function GET() {
     await connectDb();
     const jar = await cookies();
     const token = jar.get(COOKIE_NAME)?.value;
-    if (!token) return error("Not authenticated", 401);
+    if (!token) {
+      return json({
+        user: null,
+        restaurant: null,
+        branches: [],
+      });
+    }
 
     const session = await verifyToken(token);
-    if (!session) return error("Session expired", 401);
+    if (!session) {
+      return json({
+        user: null,
+        restaurant: null,
+        branches: [],
+      });
+    }
 
     const restaurant = await Restaurant.findById(session.restaurantId).lean<{
       _id: { toString(): string };

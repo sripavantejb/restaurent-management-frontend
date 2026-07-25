@@ -6,6 +6,9 @@ import { RealtimeProvider } from "@/components/RealtimeProvider";
 export const metadata: Metadata = {
   title: "RestaurantOS",
   description: "Multi-tenant restaurant operating system",
+  icons: {
+    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+  },
 };
 
 export default function RootLayout({

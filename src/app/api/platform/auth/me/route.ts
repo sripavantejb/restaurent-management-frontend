@@ -8,10 +8,14 @@ export async function GET() {
     await connectDb();
     const jar = await cookies();
     const token = jar.get(PLATFORM_COOKIE_NAME)?.value;
-    if (!token) return error("Not authenticated", 401);
+    if (!token) {
+      return json({ admin: null });
+    }
 
     const session = await verifyPlatformToken(token);
-    if (!session) return error("Session expired", 401);
+    if (!session) {
+      return json({ admin: null });
+    }
 
     return json({
       admin: {

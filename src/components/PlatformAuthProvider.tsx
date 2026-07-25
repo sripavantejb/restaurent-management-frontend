@@ -39,7 +39,7 @@ export function PlatformAuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     const data = await res.json();
-    setAdmin(data.admin);
+    setAdmin(data.admin ?? null);
     setLoading(false);
   }, []);
 
