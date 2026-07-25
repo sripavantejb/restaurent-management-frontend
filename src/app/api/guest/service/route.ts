@@ -3,11 +3,12 @@ import { cookies } from "next/headers";
 import { TableSession } from "@/models/TableSession";
 import { ServiceRequest } from "@/models/ServiceRequest";
 import { withGuest, guestError, guestJson } from "@/lib/guest-api";
+import { SERVICE_TYPES } from "@/lib/labels";
 
 const GUEST_COOKIE = "ros_guest";
 
 const Schema = z.object({
-  type: z.enum(["WAITER", "WATER", "CUTLERY", "BILL"]),
+  type: z.enum(SERVICE_TYPES),
 });
 
 export const POST = withGuest(async (req) => {
@@ -48,7 +49,7 @@ export const POST = withGuest(async (req) => {
       status: "OPEN",
     });
 
-    if (body.type === "BILL") {
+    if (body.type === "BILL" || body.type === "GET_BILL") {
       session.status = "BILL_REQUESTED";
       await session.save();
     }

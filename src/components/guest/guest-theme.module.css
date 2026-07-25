@@ -644,6 +644,37 @@
   margin-top: 20px;
 }
 
+.serviceBlock {
+  margin-top: 20px;
+}
+
+.serviceGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.serviceChip {
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--g-border, #e5e7eb);
+  background: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--g-ink, #111);
+  text-align: center;
+}
+
+.serviceChip:disabled {
+  opacity: 0.5;
+}
+
+.serviceChip:active:not(:disabled) {
+  border-color: var(--g-teal, #2a9d8f);
+  background: color-mix(in srgb, var(--g-teal, #2a9d8f) 8%, white);
+}
+
 .microcopy {
   font-size: 12px;
   color: var(--g-muted);

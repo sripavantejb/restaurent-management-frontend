@@ -1,5 +1,6 @@
 import mongoose, { Schema, models, model } from "mongoose";
 import { tenantPlugin } from "@/lib/tenant";
+import { SERVICE_TYPES, type ServiceType } from "@/lib/labels";
 
 export interface IServiceRequest {
   _id: mongoose.Types.ObjectId;
@@ -7,7 +8,7 @@ export interface IServiceRequest {
   branchId: mongoose.Types.ObjectId;
   sessionId: mongoose.Types.ObjectId;
   tableId: mongoose.Types.ObjectId;
-  type: "WAITER" | "WATER" | "CUTLERY" | "BILL";
+  type: ServiceType;
   status: "OPEN" | "ACKNOWLEDGED" | "DONE";
   createdAt: Date;
   acknowledgedAt?: Date | null;
@@ -20,7 +21,7 @@ const ServiceRequestSchema = new Schema(
     tableId: { type: Schema.Types.ObjectId, ref: "Table", required: true },
     type: {
       type: String,
-      enum: ["WAITER", "WATER", "CUTLERY", "BILL"],
+      enum: [...SERVICE_TYPES],
       required: true,
     },
     status: {

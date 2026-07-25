@@ -4,11 +4,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch, useAuth } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { SERVICE_STATUS_LABEL, SERVICE_TYPE_LABEL, label } from "@/lib/labels";
+import {
+  SERVICE_STATUS_LABEL,
+  SERVICE_TYPE_LABEL,
+  label,
+  type ServiceType,
+} from "@/lib/labels";
 
 export interface ServiceReq {
   id: string;
-  type: "WAITER" | "WATER" | "CUTLERY" | "BILL";
+  type: ServiceType;
   status: "OPEN" | "ACKNOWLEDGED" | "DONE";
   tableId: string;
   tableNumber: number | null;

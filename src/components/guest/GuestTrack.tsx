@@ -6,10 +6,12 @@ import { useGSAP } from "@gsap/react";
 import { formatMoney } from "@/lib/money";
 import {
   APPROVAL_STATUS_LABEL,
+  GUEST_SERVICE_ACTIONS,
   ORDER_STATUS_LABEL,
   SERVICE_TYPE_LABEL,
   SESSION_STATUS_LABEL,
   label,
+  type ServiceType,
 } from "@/lib/labels";
 import type { CheckoutData, MenuItem } from "./types";
 import { prefersReducedMotion, statusTone } from "./utils";
@@ -52,7 +54,7 @@ export function GuestTrack({
   quickReorder: MenuItem[];
   busy: boolean;
   onTip: (p: number) => void;
-  onService: (type: "WAITER" | "WATER" | "CUTLERY") => void;
+  onService: (type: ServiceType) => void;
   onPay: () => void;
   onPayAtCounter: () => void;
   onOrderAgain: () => void;
@@ -145,17 +147,24 @@ export function GuestTrack({
         </div>
       ) : null}
 
-      <div className={styles.serviceRow}>
-        {(["WAITER", "WATER", "CUTLERY"] as const).map((t) => (
-          <button
-            key={t}
-            type="button"
-            className={styles.btnGhost}
-            onClick={() => onService(t)}
-          >
-            {label(SERVICE_TYPE_LABEL, t)}
-          </button>
-        ))}
+      <div className={styles.serviceBlock}>
+        <p className={styles.sectionLabel}>Need something?</p>
+        <p className={styles.muted} style={{ margin: "0 0 10px", fontSize: 13 }}>
+          Staff will confirm each request at your table
+        </p>
+        <div className={styles.serviceGrid}>
+          {GUEST_SERVICE_ACTIONS.map((t) => (
+            <button
+              key={t}
+              type="button"
+              className={styles.serviceChip}
+              disabled={busy}
+              onClick={() => onService(t)}
+            >
+              {label(SERVICE_TYPE_LABEL, t)}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className={styles.bill}>

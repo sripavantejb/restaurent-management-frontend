@@ -62,12 +62,40 @@ export const ROLE_LABEL: Record<string, string> = {
   CHEF: "Chef",
 };
 
-export const SERVICE_TYPE_LABEL: Record<string, string> = {
+export const SERVICE_TYPES = [
+  "WAITER",
+  "WATER",
+  "WATER_BOTTLE",
+  "CUTLERY",
+  "COOLING",
+  "TISSUE",
+  "GET_BILL",
+  "BILL",
+] as const;
+
+export type ServiceType = (typeof SERVICE_TYPES)[number];
+
+export const SERVICE_TYPE_LABEL: Record<ServiceType, string> = {
   WAITER: "Call waiter",
   WATER: "Water",
+  WATER_BOTTLE: "Water bottle",
   CUTLERY: "Cutlery",
-  BILL: "Bill request",
+  COOLING: "Cooling / AC",
+  TISSUE: "Tissues",
+  GET_BILL: "Get bill",
+  BILL: "Pay at counter",
 };
+
+/** Guest track chips (excludes Pay at counter — that stays in the bill section). */
+export const GUEST_SERVICE_ACTIONS: ServiceType[] = [
+  "WAITER",
+  "WATER",
+  "WATER_BOTTLE",
+  "CUTLERY",
+  "COOLING",
+  "TISSUE",
+  "GET_BILL",
+];
 
 export const SERVICE_STATUS_LABEL: Record<string, string> = {
   OPEN: "New",

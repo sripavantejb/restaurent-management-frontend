@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatMoney } from "@/lib/money";
 import { apiUrl } from "@/lib/api-url";
+import { SERVICE_TYPE_LABEL, label, type ServiceType } from "@/lib/labels";
 import { GuestBottomBar } from "@/components/guest/GuestBottomBar";
 import { GuestCartSheet } from "@/components/guest/GuestCartSheet";
 import { GuestHeader } from "@/components/guest/GuestHeader";
@@ -339,7 +340,7 @@ export default function GuestTableClient({
     }
   }
 
-  async function service(type: "WAITER" | "WATER" | "CUTLERY" | "BILL") {
+  async function service(type: ServiceType) {
     try {
       const res = await fetch(apiUrl("/api/guest/service"), {
         method: "POST",
@@ -352,14 +353,15 @@ export default function GuestTableClient({
         showToast(data.error || "Request failed");
         return;
       }
+      const billLike = type === "BILL" || type === "GET_BILL";
       showToast(
         data.throttled
           ? data.message
-          : type === "BILL"
-            ? "Bill requested — staff on the way"
-            : "Staff notified"
+          : billLike
+            ? `${label(SERVICE_TYPE_LABEL, type)} — waiter will confirm`
+            : `${label(SERVICE_TYPE_LABEL, type)} — staff notified`
       );
-      if (type === "BILL") void pollCheckout();
+      if (billLike) void pollCheckout();
     } catch {
       showToast("Could not reach staff");
     }

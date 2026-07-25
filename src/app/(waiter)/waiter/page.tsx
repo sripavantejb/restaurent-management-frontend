@@ -11,9 +11,11 @@ import {
 import { formatMoney } from "@/lib/money";
 import {
   ORDER_STATUS_LABEL,
+  SERVICE_TYPE_LABEL,
   SESSION_STATUS_LABEL,
   label,
 } from "@/lib/labels";
+import { ApprovalQueue } from "@/components/ApprovalQueue";
 
 interface TableRow {
   id: string;
@@ -142,15 +144,7 @@ export default function WaiterFloorPage() {
             setAlertFlash(true);
             setTimeout(() => setAlertFlash(false), 1200);
             showToast(
-              `Table ${r.tableNumber ?? "?"} · ${label(
-                {
-                  WAITER: "Call waiter",
-                  WATER: "Water",
-                  CUTLERY: "Cutlery",
-                  BILL: "Bill request",
-                },
-                r.type
-              )}`
+              `Table ${r.tableNumber ?? "?"} · ${label(SERVICE_TYPE_LABEL, r.type)}`
             );
             setTab("calls");
           }
@@ -492,9 +486,14 @@ export default function WaiterFloorPage() {
               </div>
             </div>
           ) : tab === "calls" ? (
-            <div className="overflow-auto p-3">
+            <div className="space-y-4 overflow-auto p-3">
+              <ApprovalQueue
+                tableNumbers={Object.fromEntries(
+                  tables.map((t) => [t.id, t.number])
+                )}
+              />
               <ServiceRequestInbox
-                maxHeightClass="max-h-[70vh]"
+                maxHeightClass="max-h-[50vh]"
                 onSelectTable={(tableId) => handleSelectFromCall(tableId)}
               />
             </div>
@@ -656,6 +655,16 @@ export default function WaiterFloorPage() {
         </section>
 
         <aside className="flex min-h-0 flex-col border-t border-[var(--border)] lg:border-t-0 lg:border-l">
+          <div className="hidden border-b border-[var(--border)] px-3 py-2 text-xs font-semibold tracking-wide text-[var(--muted)] uppercase lg:block">
+            QR approvals
+          </div>
+          <div className="hidden max-h-56 min-h-0 overflow-auto p-2 lg:block">
+            <ApprovalQueue
+              tableNumbers={Object.fromEntries(
+                tables.map((t) => [t.id, t.number])
+              )}
+            />
+          </div>
           <div className="hidden border-b border-[var(--border)] px-3 py-2 text-xs font-semibold tracking-wide text-[var(--muted)] uppercase lg:block">
             Guest calls
           </div>
