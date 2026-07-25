@@ -15,7 +15,7 @@ function sse(event: StreamEvent): string {
 /**
  * Copilot chat:
  * 1) Always query live Mongo via intent tools
- * 2) Optionally polish with OpenAI (numbers stay from tools)
+ * 2) Optionally polish with OpenAI (25s timeout; falls back to raw DB text)
  */
 export async function handleCopilotChat(input: {
   ctx: AiTenantCtx;
@@ -46,6 +46,7 @@ export async function handleCopilotChat(input: {
 
   const conversationId = conversation._id.toString();
   emit(sse({ type: "conversation", conversationId }));
+  emit(sse({ type: "status", content: "Querying live restaurant data…" }));
 
   await AiMessage.create({
     restaurantId: ctx.restaurantId,
@@ -61,35 +62,43 @@ export async function handleCopilotChat(input: {
 
   const runOne = async (name: string, args: Record<string, unknown> = {}) => {
     emit(sse({ type: "tool_start", tool: name }));
-    const result = await executeTool({
-      ctx,
-      toolName: name,
-      args,
-      conversationId,
-      question: message,
-    });
-    emit(sse({ type: "tool_end", tool: name }));
-    if (result.blocks?.length) {
-      for (const b of result.blocks) {
-        collectedBlocks!.push(b);
-        emit(sse({ type: "block", block: b }));
+    try {
+      const result = await executeTool({
+        ctx,
+        toolName: name,
+        args,
+        conversationId,
+        question: message,
+      });
+      if (result.blocks?.length) {
+        for (const b of result.blocks) {
+          collectedBlocks!.push(b);
+          emit(sse({ type: "block", block: b }));
+        }
       }
+      toolSummaries.push(result.summary || `${name}: done`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "tool failed";
+      toolSummaries.push(`${name}: failed (${msg})`);
+    } finally {
+      emit(sse({ type: "tool_end", tool: name }));
     }
-    toolSummaries.push(result.summary);
-    return {
-      summary: result.summary,
-      payload: { data: result.data, blocks: result.blocks },
-    };
   };
 
   const names = detectIntentTools(message).filter((n) =>
     allowed.some((t) => t.name === n)
   );
 
-  for (const name of names) {
-    const args =
-      name === "searchKnowledge" ? { query: message, topK: 6 } : {};
-    await runOne(name, args);
+  if (names.length === 0) {
+    toolSummaries.push(
+      "No matching live tools for this question. Try sales, tables, kitchen, stock, or forecast."
+    );
+  } else {
+    for (const name of names) {
+      const args =
+        name === "searchKnowledge" ? { query: message, topK: 6 } : {};
+      await runOne(name, args);
+    }
   }
 
   const rawText =
@@ -98,32 +107,36 @@ export async function handleCopilotChat(input: {
       : "I couldn't match that to live restaurant data. Try asking about sales, tables, kitchen, or stock.";
 
   let assistantText = rawText;
+  let streamed = false;
 
   if (hasOpenAiChatKey() && toolSummaries.length > 0) {
+    emit(sse({ type: "status", content: "Polishing answer with OpenAI…" }));
     try {
       const polished = await polishToolAnswer({
         question: message,
         toolSummaries,
-        onDelta: (d) => emit(sse({ type: "delta", content: d })),
+        onDelta: (d) => {
+          streamed = true;
+          emit(sse({ type: "delta", content: d }));
+        },
       });
       if (polished.trim()) {
         assistantText = polished.trim();
-      } else {
-        for (const part of chunkText(rawText, 48)) {
-          emit(sse({ type: "delta", content: part }));
-        }
-        assistantText = rawText;
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "OpenAI polish failed";
-      emit(sse({ type: "error", error: msg }));
-      for (const part of chunkText(rawText, 48)) {
-        emit(sse({ type: "delta", content: part }));
-      }
-      assistantText = rawText;
+      // Soft warning — still return DB answer
+      emit(
+        sse({
+          type: "status",
+          content: `OpenAI polish skipped (${msg.slice(0, 80)}). Showing live DB answer.`,
+        })
+      );
     }
-  } else {
-    for (const part of chunkText(rawText, 48)) {
+  }
+
+  if (!streamed) {
+    for (const part of chunkText(assistantText, 48)) {
       emit(sse({ type: "delta", content: part }));
     }
   }

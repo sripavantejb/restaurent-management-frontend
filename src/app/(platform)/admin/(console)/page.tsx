@@ -16,6 +16,10 @@ interface Counts {
   suspended: number;
   trial?: number;
   billingActive?: number;
+  pastDue?: number;
+  cancelled?: number;
+  trialExpiringSoon?: number;
+  modulesOffTenants?: number;
 }
 
 interface RestaurantRow {
@@ -23,9 +27,12 @@ interface RestaurantRow {
   name: string;
   slug: string;
   status: string;
+  plan?: string;
+  billingStatus?: string;
   branchCount: number;
   contactEmail: string;
   createdAt: string | null;
+  trialEndsAt?: string | null;
 }
 
 function statusTone(status: string): "success" | "warn" | "danger" | "neutral" {
@@ -38,12 +45,14 @@ function statusTone(status: string): "success" | "warn" | "danger" | "neutral" {
 export default function PlatformOverviewPage() {
   const [counts, setCounts] = useState<Counts | null>(null);
   const [recent, setRecent] = useState<RestaurantRow[]>([]);
+  const [all, setAll] = useState<RestaurantRow[]>([]);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     try {
       const data = await platformFetch("/api/platform/restaurants");
       setCounts(data.counts);
+      setAll(data.restaurants);
       setRecent(data.restaurants.slice(0, 5));
       setError("");
     } catch (e) {
@@ -76,6 +85,46 @@ export default function PlatformOverviewPage() {
     { label: "Suspended", value: counts.suspended },
     { label: "On trial", value: counts.trial ?? 0 },
     { label: "Billing active", value: counts.billingActive ?? 0 },
+    { label: "Past due", value: counts.pastDue ?? 0 },
+    { label: "Trial ending ≤7d", value: counts.trialExpiringSoon ?? 0 },
+  ];
+
+  const now = Date.now();
+  const soon = now + 7 * 86400000;
+  const pendingQ = all.filter((r) => r.status === "PENDING");
+  const suspendedQ = all.filter((r) => r.status === "SUSPENDED");
+  const pastDueQ = all.filter((r) => r.billingStatus === "PAST_DUE");
+  const trialEndingQ = all.filter((r) => {
+    if (r.billingStatus !== "TRIAL" || !r.trialEndsAt) return false;
+    const t = new Date(r.trialEndsAt).getTime();
+    return t >= now && t <= soon;
+  });
+
+  const queues = [
+    {
+      title: "Pending activation",
+      href: "/admin/restaurants?status=PENDING",
+      rows: pendingQ,
+      empty: "No pending restaurants",
+    },
+    {
+      title: "Suspended",
+      href: "/admin/restaurants?status=SUSPENDED",
+      rows: suspendedQ,
+      empty: "None suspended",
+    },
+    {
+      title: "Trial ending soon",
+      href: "/admin/billing?filter=trial_ending",
+      rows: trialEndingQ,
+      empty: "No trials ending this week",
+    },
+    {
+      title: "Past due",
+      href: "/admin/billing?billingStatus=PAST_DUE",
+      rows: pastDueQ,
+      empty: "No past-due accounts",
+    },
   ];
 
   return (
@@ -86,12 +135,20 @@ export default function PlatformOverviewPage() {
             Platform overview
           </h1>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            SaaS control for restaurant registrations and tenant status.
+            Control tenant status, billing, modules, and plan limits.
           </p>
         </div>
-        <Link href="/admin/restaurants/new">
-          <Button>Register restaurant</Button>
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/admin/modules">
+            <Button variant="secondary">Modules matrix</Button>
+          </Link>
+          <Link href="/admin/billing">
+            <Button variant="secondary">Billing queue</Button>
+          </Link>
+          <Link href="/admin/restaurants/new">
+            <Button>Register restaurant</Button>
+          </Link>
+        </div>
       </div>
 
       <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -100,14 +157,56 @@ export default function PlatformOverviewPage() {
             <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
               {t.label}
             </p>
-            <p className="num mt-2 text-3xl font-semibold text-[var(--ink)]">{t.value}</p>
+            <p className="num mt-2 text-3xl font-semibold text-[var(--ink)]">
+              {t.value}
+            </p>
+          </Card>
+        ))}
+      </div>
+
+      <div className="mt-8 grid gap-4 lg:grid-cols-2">
+        {queues.map((q) => (
+          <Card key={q.title} className="p-4">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-[var(--ink)]">
+                {q.title}{" "}
+                <span className="num text-[var(--muted)]">({q.rows.length})</span>
+              </h2>
+              <Link
+                href={q.href}
+                className="text-xs text-[var(--accent)] hover:underline"
+              >
+                Open
+              </Link>
+            </div>
+            {q.rows.length === 0 ? (
+              <p className="text-sm text-[var(--muted)]">{q.empty}</p>
+            ) : (
+              <ul className="space-y-2">
+                {q.rows.slice(0, 4).map((r) => (
+                  <li key={r.id}>
+                    <Link
+                      href={`/admin/restaurants/${r.id}`}
+                      className="flex items-center justify-between gap-2 text-sm hover:text-[var(--accent)]"
+                    >
+                      <span className="font-medium">{r.name}</span>
+                      <Badge tone={statusTone(r.status)}>
+                        {label(RESTAURANT_STATUS_LABEL, r.status)}
+                      </Badge>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
           </Card>
         ))}
       </div>
 
       <div className="mt-8">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-[var(--ink)]">Recent registrations</h2>
+          <h2 className="text-lg font-semibold text-[var(--ink)]">
+            Recent registrations
+          </h2>
           <Link
             href="/admin/restaurants"
             className="text-sm text-[var(--accent)] hover:underline"
@@ -115,32 +214,7 @@ export default function PlatformOverviewPage() {
             View all
           </Link>
         </div>
-        <div className="space-y-2 sm:hidden">
-          {recent.length === 0 ? (
-            <p className="rounded-[6px] border border-[var(--border)] bg-white px-4 py-8 text-center text-sm text-[var(--muted)]">
-              No restaurants yet. Register the first tenant.
-            </p>
-          ) : (
-            recent.map((r) => (
-              <Link
-                key={r.id}
-                href={`/admin/restaurants/${r.id}`}
-                className="flex items-center justify-between gap-3 rounded-[6px] border border-[var(--border)] bg-white p-3"
-              >
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{r.name}</p>
-                  <p className="text-xs text-[var(--muted)]">
-                    {r.slug} · {r.branchCount} branches
-                  </p>
-                </div>
-                <Badge tone={statusTone(r.status)}>
-                  {label(RESTAURANT_STATUS_LABEL, r.status)}
-                </Badge>
-              </Link>
-            ))
-          )}
-        </div>
-        <Card className="hidden overflow-hidden sm:block">
+        <div className="overflow-hidden rounded-[6px] border border-[var(--border)]">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-[var(--border)] bg-[var(--surface-2)] text-xs uppercase tracking-wide text-[var(--muted)]">
               <tr>
@@ -153,28 +227,34 @@ export default function PlatformOverviewPage() {
             <tbody>
               {recent.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-[var(--muted)]">
-                    No restaurants yet. Register the first tenant.
+                  <td
+                    colSpan={4}
+                    className="px-4 py-8 text-center text-[var(--muted)]"
+                  >
+                    No restaurants yet
                   </td>
                 </tr>
               ) : (
                 recent.map((r) => (
-                  <tr key={r.id} className="border-b border-[var(--border)] last:border-0">
+                  <tr
+                    key={r.id}
+                    className="border-b border-[var(--border)] last:border-0"
+                  >
                     <td className="px-4 py-3">
                       <Link
                         href={`/admin/restaurants/${r.id}`}
-                        className="font-medium text-[var(--ink)] hover:text-[var(--accent)]"
+                        className="font-medium hover:text-[var(--accent)]"
                       >
                         {r.name}
                       </Link>
-                      <p className="text-xs text-[var(--muted)]">{r.slug}</p>
+                      <p className="num text-xs text-[var(--muted)]">{r.slug}</p>
                     </td>
                     <td className="px-4 py-3">
                       <Badge tone={statusTone(r.status)}>
                         {label(RESTAURANT_STATUS_LABEL, r.status)}
                       </Badge>
                     </td>
-                    <td className="px-4 py-3 num">{r.branchCount}</td>
+                    <td className="num px-4 py-3">{r.branchCount}</td>
                     <td className="px-4 py-3 text-[var(--muted)]">
                       {r.contactEmail || "—"}
                     </td>
@@ -183,7 +263,7 @@ export default function PlatformOverviewPage() {
               )}
             </tbody>
           </table>
-        </Card>
+        </div>
       </div>
     </div>
   );

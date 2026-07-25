@@ -4,6 +4,7 @@ import { Branch } from "@/models/Branch";
 import { Restaurant } from "@/models/Restaurant";
 import { COOKIE_NAME, verifyToken } from "@/lib/auth";
 import { json, error } from "@/lib/api";
+import { resolveModules } from "@/lib/platform/modules";
 
 export async function GET() {
   try {
@@ -32,6 +33,9 @@ export async function GET() {
       name: string;
       currency: string;
       logoUrl: string;
+      plan?: string;
+      modules?: Record<string, boolean>;
+      qrOrderingEnabled?: boolean;
     } | null>();
 
     const branches = await Branch.find({
@@ -44,6 +48,10 @@ export async function GET() {
         code: string;
       }[]
     >();
+
+    const modules = restaurant
+      ? resolveModules(restaurant.plan, restaurant.modules)
+      : null;
 
     return json({
       user: {
@@ -61,6 +69,9 @@ export async function GET() {
             name: restaurant.name,
             currency: restaurant.currency,
             logoUrl: restaurant.logoUrl,
+            plan: restaurant.plan ?? "STARTER",
+            modules,
+            qrOrderingEnabled: restaurant.qrOrderingEnabled !== false,
           }
         : null,
       branches: (branches ?? []).map((b) => ({

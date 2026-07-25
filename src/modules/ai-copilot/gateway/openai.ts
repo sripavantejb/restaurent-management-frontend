@@ -132,71 +132,81 @@ export async function streamOpenAiFinal(input: {
   messages: ChatMsg[];
   onDelta: (text: string) => void;
   systemPrompt?: string;
+  timeoutMs?: number;
 }): Promise<string> {
   const key = llmApiKey();
   if (!key) throw new Error("Missing NVIDIA_API_KEY or OPENAI_API_KEY");
 
-  const res = await fetch(chatCompletionsUrl(), {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify({
-      model: chatModelName(),
-      messages: [
-        {
-          role: "system",
-          content: input.systemPrompt || COPILOT_SYSTEM_PROMPT,
-        },
-        ...input.messages,
-      ],
-      stream: true,
-      temperature: llmProvider() === "nvidia" ? 0.6 : 0.3,
-      ...(llmProvider() === "nvidia"
-        ? { max_tokens: 4096, ...nvidiaChatExtras() }
-        : { max_tokens: 1200 }),
-    }),
-  });
+  const controller = new AbortController();
+  const timeoutMs = input.timeoutMs ?? 25000;
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-  if (!res.ok || !res.body) {
-    const t = await res.text();
-    throw new Error(`LLM stream error: ${t.slice(0, 280)}`);
-  }
+  try {
+    const res = await fetch(chatCompletionsUrl(), {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: chatModelName(),
+        messages: [
+          {
+            role: "system",
+            content: input.systemPrompt || COPILOT_SYSTEM_PROMPT,
+          },
+          ...input.messages,
+        ],
+        stream: true,
+        temperature: llmProvider() === "nvidia" ? 0.6 : 0.3,
+        ...(llmProvider() === "nvidia"
+          ? { max_tokens: 4096, ...nvidiaChatExtras() }
+          : { max_tokens: 1200 }),
+      }),
+    });
 
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let full = "";
-  let buffer = "";
+    if (!res.ok || !res.body) {
+      const t = await res.text();
+      throw new Error(`LLM stream error: ${t.slice(0, 280)}`);
+    }
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed.startsWith("data:")) continue;
-      const payload = trimmed.slice(5).trim();
-      if (payload === "[DONE]") continue;
-      try {
-        const json = JSON.parse(payload) as {
-          choices: { delta: { content?: string } }[];
-        };
-        const delta = json.choices[0]?.delta?.content;
-        if (delta) {
-          full += delta;
-          input.onDelta(delta);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let full = "";
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("data:")) continue;
+        const payload = trimmed.slice(5).trim();
+        if (payload === "[DONE]") continue;
+        try {
+          const json = JSON.parse(payload) as {
+            choices: { delta: { content?: string } }[];
+          };
+          const delta = json.choices[0]?.delta?.content;
+          if (delta) {
+            full += delta;
+            input.onDelta(delta);
+          }
+        } catch {
+          /* ignore partial */
         }
-      } catch {
-        /* ignore partial */
       }
     }
-  }
 
-  return full;
+    return full;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** Polish live tool summaries with OpenAI (or configured chat provider). */

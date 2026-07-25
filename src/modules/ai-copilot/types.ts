@@ -59,7 +59,8 @@ export interface StreamEvent {
     | "tool_end"
     | "done"
     | "error"
-    | "conversation";
+    | "conversation"
+    | "status";
   content?: string;
   block?: UiMessageBlock;
   tool?: string;

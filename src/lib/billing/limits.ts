@@ -8,19 +8,36 @@ import {
   isUnlimited,
   type PlanLimits,
 } from "@/lib/billing/plans";
+import {
+  resolveLimits,
+  type LimitOverrides,
+} from "@/lib/platform/modules";
 
 export type LimitKind = "branches" | "staff" | "tables";
 
 export async function getRestaurantLimits(
   restaurantId: Types.ObjectId | string
-): Promise<{ plan: string; limits: PlanLimits; billingStatus: string }> {
+): Promise<{
+  plan: string;
+  limits: PlanLimits;
+  billingStatus: string;
+  limitOverrides: LimitOverrides;
+}> {
   const r = await Restaurant.findById(restaurantId)
-    .select("plan billingStatus")
-    .lean<{ plan?: string; billingStatus?: string } | null>();
+    .select("plan billingStatus limitOverrides")
+    .lean<{
+      plan?: string;
+      billingStatus?: string;
+      limitOverrides?: LimitOverrides;
+    } | null>();
+  const plan = r?.plan ?? "STARTER";
+  const planLimits = limitsForPlan(plan);
+  const limitOverrides = r?.limitOverrides ?? {};
   return {
-    plan: r?.plan ?? "STARTER",
+    plan,
     billingStatus: r?.billingStatus ?? "TRIAL",
-    limits: limitsForPlan(r?.plan),
+    limitOverrides,
+    limits: resolveLimits(planLimits, limitOverrides),
   };
 }
 
@@ -41,7 +58,7 @@ export async function assertWithinLimit(
       return {
         ok: false,
         message: `${plan} plan allows ${limits.maxBranches} branch(es)`,
-        hint: "Ask the platform admin to upgrade this restaurant’s plan.",
+        hint: "Ask the platform admin to upgrade this restaurant’s plan or raise the limit override.",
       };
     }
   }
@@ -53,7 +70,7 @@ export async function assertWithinLimit(
       return {
         ok: false,
         message: `${plan} plan allows ${limits.maxStaff} staff accounts`,
-        hint: "Ask the platform admin to upgrade this restaurant’s plan.",
+        hint: "Ask the platform admin to upgrade this restaurant’s plan or raise the limit override.",
       };
     }
   }
@@ -65,7 +82,7 @@ export async function assertWithinLimit(
       return {
         ok: false,
         message: `${plan} plan allows ${limits.maxTables} tables`,
-        hint: "Ask the platform admin to upgrade this restaurant’s plan.",
+        hint: "Ask the platform admin to upgrade this restaurant’s plan or raise the limit override.",
       };
     }
   }

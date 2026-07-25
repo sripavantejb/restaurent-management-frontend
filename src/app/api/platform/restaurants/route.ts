@@ -6,6 +6,12 @@ import { Restaurant, RESTAURANT_STATUSES } from "@/models/Restaurant";
 import { Branch } from "@/models/Branch";
 import { User } from "@/models/User";
 import { PLANS, defaultTrialEndsAt } from "@/lib/billing/plans";
+import {
+  MODULE_IDS,
+  countEnabledModules,
+  defaultModulesForPlan,
+  resolveModules,
+} from "@/lib/platform/modules";
 
 const RegisterSchema = z.object({
   name: z.string().min(2).max(120),
@@ -33,11 +39,19 @@ const RegisterSchema = z.object({
 export const GET = withPlatformAuth(async ({ req }) => {
   const url = new URL(req.url);
   const status = url.searchParams.get("status");
+  const billingStatus = url.searchParams.get("billingStatus");
   const q = (url.searchParams.get("q") || "").trim().toLowerCase();
+  const trialExpiring = url.searchParams.get("trialExpiring") === "1";
 
   const filter: Record<string, unknown> = {};
   if (status && RESTAURANT_STATUSES.includes(status as never)) {
     filter.status = status;
+  }
+  if (
+    billingStatus &&
+    ["TRIAL", "ACTIVE", "PAST_DUE", "CANCELLED"].includes(billingStatus)
+  ) {
+    filter.billingStatus = billingStatus;
   }
 
   let restaurants = await Restaurant.find(filter)
@@ -53,24 +67,88 @@ export const GET = withPlatformAuth(async ({ req }) => {
     );
   }
 
-  const [total, active, pending, suspended, trial, billingActive] =
-    await Promise.all([
-      Restaurant.countDocuments(),
-      Restaurant.countDocuments({ status: "ACTIVE" }),
-      Restaurant.countDocuments({ status: "PENDING" }),
-      Restaurant.countDocuments({ status: "SUSPENDED" }),
-      Restaurant.countDocuments({ billingStatus: "TRIAL" }),
-      Restaurant.countDocuments({ billingStatus: "ACTIVE" }),
-    ]);
+  const soon = new Date();
+  soon.setDate(soon.getDate() + 7);
+  const now = new Date();
+
+  if (trialExpiring) {
+    restaurants = restaurants.filter((r) => {
+      if ((r.billingStatus || "TRIAL") !== "TRIAL") return false;
+      if (!r.trialEndsAt) return false;
+      const t = new Date(r.trialEndsAt);
+      return t >= now && t <= soon;
+    });
+  }
+
+  const [
+    total,
+    active,
+    pending,
+    suspended,
+    trial,
+    billingActive,
+    pastDue,
+    cancelled,
+  ] = await Promise.all([
+    Restaurant.countDocuments(),
+    Restaurant.countDocuments({ status: "ACTIVE" }),
+    Restaurant.countDocuments({ status: "PENDING" }),
+    Restaurant.countDocuments({ status: "SUSPENDED" }),
+    Restaurant.countDocuments({ billingStatus: "TRIAL" }),
+    Restaurant.countDocuments({ billingStatus: "ACTIVE" }),
+    Restaurant.countDocuments({ billingStatus: "PAST_DUE" }),
+    Restaurant.countDocuments({ billingStatus: "CANCELLED" }),
+  ]);
+
+  const allForCounts = await Restaurant.find()
+    .select("plan modules trialEndsAt billingStatus")
+    .lean();
+  const trialExpiringSoon = allForCounts.filter((r) => {
+    if ((r.billingStatus || "TRIAL") !== "TRIAL" || !r.trialEndsAt) return false;
+    const t = new Date(r.trialEndsAt);
+    return t >= now && t <= soon;
+  }).length;
+  const modulesOffTenants = allForCounts.filter((r) => {
+    const modules = resolveModules(r.plan, r.modules as Record<string, boolean>);
+    return countEnabledModules(modules) < MODULE_IDS.length;
+  }).length;
 
   const ids = restaurants.map((r) => r._id);
   const branchCounts = await Branch.aggregate<{
     _id: (typeof ids)[number];
     count: number;
-  }>([{ $match: { restaurantId: { $in: ids } } }, { $group: { _id: "$restaurantId", count: { $sum: 1 } } }]);
+  }>([
+    { $match: { restaurantId: { $in: ids } } },
+    { $group: { _id: "$restaurantId", count: { $sum: 1 } } },
+  ]);
   const branchMap = new Map(
     branchCounts.map((b) => [b._id.toString(), b.count])
   );
+
+  const rows = restaurants.map((r) => {
+    const modules = resolveModules(r.plan, r.modules as Record<string, boolean>);
+    const enabled = countEnabledModules(modules);
+    return {
+      id: r._id.toString(),
+      name: r.name,
+      slug: r.slug,
+      status: r.status ?? "ACTIVE",
+      plan: r.plan ?? "STARTER",
+      billingStatus: r.billingStatus ?? "TRIAL",
+      trialEndsAt: r.trialEndsAt ?? null,
+      address: r.address,
+      contactEmail: r.contactEmail || "",
+      contactPhone: r.contactPhone || "",
+      gstNumber: r.gstNumber,
+      currency: r.currency,
+      branchCount: branchMap.get(r._id.toString()) ?? 0,
+      modulesEnabledCount: enabled,
+      modulesTotal: MODULE_IDS.length,
+      modules,
+      qrOrderingEnabled: r.qrOrderingEnabled !== false,
+      createdAt: (r as { createdAt?: Date }).createdAt ?? null,
+    };
+  });
 
   return json({
     counts: {
@@ -80,22 +158,12 @@ export const GET = withPlatformAuth(async ({ req }) => {
       suspended,
       trial,
       billingActive,
+      pastDue,
+      cancelled,
+      trialExpiringSoon,
+      modulesOffTenants,
     },
-    restaurants: restaurants.map((r) => ({
-      id: r._id.toString(),
-      name: r.name,
-      slug: r.slug,
-      status: r.status ?? "ACTIVE",
-      plan: r.plan ?? "STARTER",
-      billingStatus: r.billingStatus ?? "TRIAL",
-      address: r.address,
-      contactEmail: r.contactEmail || "",
-      contactPhone: r.contactPhone || "",
-      gstNumber: r.gstNumber,
-      currency: r.currency,
-      branchCount: branchMap.get(r._id.toString()) ?? 0,
-      createdAt: (r as { createdAt?: Date }).createdAt ?? null,
-    })),
+    restaurants: rows,
   });
 });
 
@@ -130,6 +198,8 @@ export const POST = withPlatformAuth(async ({ req }) => {
     );
   }
 
+  const modules = defaultModulesForPlan(body.plan);
+
   const restaurant = await Restaurant.create({
     name: body.name.trim(),
     slug,
@@ -137,6 +207,12 @@ export const POST = withPlatformAuth(async ({ req }) => {
     plan: body.plan,
     billingStatus: "TRIAL",
     trialEndsAt: defaultTrialEndsAt(),
+    modules,
+    limitOverrides: {
+      maxBranches: null,
+      maxStaff: null,
+      maxTables: null,
+    },
     address: body.address,
     gstNumber: body.gstNumber,
     contactEmail: body.contactEmail || ownerEmail,
@@ -174,6 +250,7 @@ export const POST = withPlatformAuth(async ({ req }) => {
         plan: restaurant.plan,
         billingStatus: restaurant.billingStatus,
         trialEndsAt: restaurant.trialEndsAt,
+        modules,
       },
       branch: {
         id: branch._id.toString(),

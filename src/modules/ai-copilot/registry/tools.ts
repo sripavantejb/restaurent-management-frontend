@@ -325,25 +325,188 @@ export const AI_TOOLS: AiToolDefinition[] = [
     name: "getAttendanceToday",
     description: "Employee attendance today",
     permissions: ["users.manage"],
-    handler: () => Actions.notYetAvailable("HR attendance"),
+    handler: async (ctx) => {
+      const { Attendance } = await import("@/models/Attendance");
+      const { User } = await import("@/models/User");
+      const date = new Date().toISOString().slice(0, 10);
+      const [rows, users] = await Promise.all([
+        Attendance.find({
+          restaurantId: ctx.restaurantId,
+          branchId: ctx.branchId,
+          date,
+        }).lean(),
+        User.find({
+          restaurantId: ctx.restaurantId,
+          branchId: ctx.branchId,
+          isActive: true,
+        })
+          .select("name role")
+          .lean(),
+      ]);
+      const byUser = new Map(rows.map((r) => [r.userId.toString(), r]));
+      const list = users.map((u) => {
+        const a = byUser.get(u._id.toString());
+        return {
+          name: u.name,
+          role: u.role,
+          status: a?.status ?? "ABSENT",
+        };
+      });
+      const present = list.filter(
+        (x) => x.status === "PRESENT" || x.status === "LATE"
+      ).length;
+      return {
+        ok: true,
+        summary: `${present}/${list.length} present today (${date}).`,
+        blocks: [
+          {
+            type: "table",
+            title: "Attendance today",
+            data: {
+              columns: ["name", "role", "status"],
+              rows: list,
+            },
+          },
+        ],
+      };
+    },
   }),
   tool({
     name: "getLateEmployees",
     description: "Late employees today",
     permissions: ["users.manage"],
-    handler: () => Actions.notYetAvailable("HR attendance"),
+    handler: async (ctx) => {
+      const { Attendance } = await import("@/models/Attendance");
+      const { User } = await import("@/models/User");
+      const date = new Date().toISOString().slice(0, 10);
+      const late = await Attendance.find({
+        restaurantId: ctx.restaurantId,
+        branchId: ctx.branchId,
+        date,
+        status: "LATE",
+      }).lean();
+      const users = await User.find({
+        _id: { $in: late.map((r) => r.userId) },
+      })
+        .select("name role")
+        .lean();
+      const umap = new Map(users.map((u) => [u._id.toString(), u]));
+      const rows = late.map((r) => {
+        const u = umap.get(r.userId.toString());
+        return {
+          name: u?.name || "",
+          role: u?.role || "",
+          checkIn: r.checkInAt
+            ? new Date(r.checkInAt).toLocaleTimeString("en-IN")
+            : "",
+        };
+      });
+      return {
+        ok: true,
+        summary: `${rows.length} late today.`,
+        blocks: [
+          {
+            type: "table",
+            title: "Late employees",
+            data: { columns: ["name", "role", "checkIn"], rows },
+          },
+        ],
+      };
+    },
   }),
   tool({
     name: "getLeaveRequests",
     description: "Pending leave requests",
     permissions: ["users.manage"],
-    handler: () => Actions.notYetAvailable("HR leave"),
+    handler: async (ctx) => {
+      const { LeaveRequest } = await import("@/models/LeaveRequest");
+      const { User } = await import("@/models/User");
+      const pending = await LeaveRequest.find({
+        restaurantId: ctx.restaurantId,
+        branchId: ctx.branchId,
+        status: "PENDING",
+      })
+        .sort({ fromDate: 1 })
+        .limit(50)
+        .lean();
+      const users = await User.find({
+        _id: { $in: pending.map((r) => r.userId) },
+      })
+        .select("name role")
+        .lean();
+      const umap = new Map(users.map((u) => [u._id.toString(), u]));
+      const rows = pending.map((r) => {
+        const u = umap.get(r.userId.toString());
+        return {
+          name: u?.name || "",
+          type: r.type,
+          from: r.fromDate,
+          to: r.toDate,
+          days: r.days,
+          reason: r.reason || "",
+        };
+      });
+      return {
+        ok: true,
+        summary: `${rows.length} pending leave request(s).`,
+        blocks: [
+          {
+            type: "table",
+            title: "Pending leaves",
+            data: {
+              columns: ["name", "type", "from", "to", "days", "reason"],
+              rows,
+            },
+          },
+        ],
+      };
+    },
   }),
   tool({
     name: "getPayroll",
     description: "Payroll summary",
     permissions: ["users.manage"],
-    handler: () => Actions.notYetAvailable("Payroll"),
+    handler: async (ctx) => {
+      const { PayrollEntry } = await import("@/models/PayrollEntry");
+      const { User } = await import("@/models/User");
+      const period = new Date().toISOString().slice(0, 7);
+      const entries = await PayrollEntry.find({
+        restaurantId: ctx.restaurantId,
+        branchId: ctx.branchId,
+        period,
+      }).lean();
+      const users = await User.find({
+        _id: { $in: entries.map((e) => e.userId) },
+      })
+        .select("name role")
+        .lean();
+      const umap = new Map(users.map((u) => [u._id.toString(), u]));
+      const rows = entries.map((e) => {
+        const u = umap.get(e.userId.toString());
+        return {
+          name: u?.name || "",
+          role: u?.role || "",
+          present: e.daysPresent,
+          leave: e.daysLeave,
+          netInr: (e.netPaise / 100).toFixed(0),
+        };
+      });
+      const total = entries.reduce((s, e) => s + e.netPaise, 0);
+      return {
+        ok: true,
+        summary: `Payroll ${period}: ₹${(total / 100).toLocaleString("en-IN")} across ${rows.length} staff.`,
+        blocks: [
+          {
+            type: "table",
+            title: `Payroll ${period}`,
+            data: {
+              columns: ["name", "role", "present", "leave", "netInr"],
+              rows,
+            },
+          },
+        ],
+      };
+    },
   }),
 
   tool({
@@ -638,8 +801,13 @@ export function toolsForOpenAI(allowed: AiToolDefinition[]) {
 export function filterToolsForUser(
   permissions: readonly string[]
 ): AiToolDefinition[] {
+  const canUseAi = permissions.includes("ai.use");
   return AI_TOOLS.filter((t) => {
-    if (t.isAction && !permissions.includes("ai.actions")) return false;
+    if (t.isAction) {
+      return permissions.includes("ai.actions");
+    }
+    // Anyone with ai.use can run read/query tools (live DB answers).
+    if (canUseAi) return true;
     return t.permissions.some((p) => permissions.includes(p));
   });
 }

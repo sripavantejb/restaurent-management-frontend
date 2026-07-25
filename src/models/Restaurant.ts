@@ -5,6 +5,7 @@ import {
   type PlanId,
   type BillingStatus,
 } from "@/lib/billing/plans";
+import type { ModuleMap, LimitOverrides } from "@/lib/platform/modules";
 
 export const RESTAURANT_STATUSES = ["PENDING", "ACTIVE", "SUSPENDED"] as const;
 export type RestaurantStatus = (typeof RESTAURANT_STATUSES)[number];
@@ -20,6 +21,10 @@ export interface IRestaurant {
   razorpayCustomerId: string;
   razorpaySubscriptionId: string;
   currentPeriodEnd: Date | null;
+  /** Per-module on/off overrides (merged with plan defaults at runtime). */
+  modules: ModuleMap;
+  /** Null/undefined fields inherit plan limits. */
+  limitOverrides: LimitOverrides;
   contactEmail: string;
   contactPhone: string;
   logoUrl: string;
@@ -97,6 +102,15 @@ const RestaurantSchema = new Schema<IRestaurant>(
     razorpayCustomerId: { type: String, default: "" },
     razorpaySubscriptionId: { type: String, default: "" },
     currentPeriodEnd: { type: Date, default: null },
+    modules: {
+      type: Schema.Types.Mixed,
+      default: () => ({}),
+    },
+    limitOverrides: {
+      maxBranches: { type: Number, default: null },
+      maxStaff: { type: Number, default: null },
+      maxTables: { type: Number, default: null },
+    },
     contactEmail: { type: String, default: "" },
     contactPhone: { type: String, default: "" },
     logoUrl: { type: String, default: "" },

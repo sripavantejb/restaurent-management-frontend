@@ -7,8 +7,18 @@ import {
 } from "@/models/Restaurant";
 import { Branch } from "@/models/Branch";
 import { User } from "@/models/User";
-import { PLANS, PLAN_CATALOG } from "@/lib/billing/plans";
+import { PLANS, PLAN_CATALOG, limitsForPlan } from "@/lib/billing/plans";
 import { Table } from "@/models/Table";
+import {
+  MODULE_IDS,
+  countEnabledModules,
+  defaultModulesForPlan,
+  resolveLimits,
+  resolveModules,
+  type ModuleId,
+} from "@/lib/platform/modules";
+
+const modulePartial = z.record(z.boolean()).optional();
 
 const PatchSchema = z.object({
   status: z.enum(RESTAURANT_STATUSES).optional(),
@@ -28,6 +38,19 @@ const PatchSchema = z.object({
   contactPhone: z.string().max(32).optional(),
   address: z.string().max(240).optional(),
   name: z.string().min(2).max(120).optional(),
+  modules: modulePartial,
+  resetModules: z.boolean().optional(),
+  enableAllModules: z.boolean().optional(),
+  limitOverrides: z
+    .object({
+      maxBranches: z.number().int().min(-1).nullable().optional(),
+      maxStaff: z.number().int().min(-1).nullable().optional(),
+      maxTables: z.number().int().min(-1).nullable().optional(),
+    })
+    .optional(),
+  trialEndsAt: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}/)).nullable().optional(),
+  extendDays: z.number().int().min(1).max(90).optional(),
+  qrOrderingEnabled: z.boolean().optional(),
 });
 
 export const GET = withPlatformAuth(async ({ req }) => {
@@ -62,7 +85,14 @@ export const GET = withPlatformAuth(async ({ req }) => {
   });
 
   const plan = restaurant.plan ?? "STARTER";
-  const limits = PLAN_CATALOG[plan as keyof typeof PLAN_CATALOG]?.limits;
+  const planLimits = PLAN_CATALOG[plan as keyof typeof PLAN_CATALOG]?.limits
+    ?? PLAN_CATALOG.STARTER.limits;
+  const limitOverrides = restaurant.limitOverrides ?? {};
+  const limits = resolveLimits(planLimits, limitOverrides);
+  const modules = resolveModules(
+    plan,
+    restaurant.modules as Record<string, boolean>
+  );
 
   return json({
     restaurant: {
@@ -82,13 +112,25 @@ export const GET = withPlatformAuth(async ({ req }) => {
       contactPhone: restaurant.contactPhone || "",
       currency: restaurant.currency,
       timezone: restaurant.timezone,
+      qrOrderingEnabled: restaurant.qrOrderingEnabled !== false,
+      modules,
+      modulesStored: restaurant.modules || {},
+      modulesEnabledCount: countEnabledModules(modules),
+      modulesTotal: MODULE_IDS.length,
+      limitOverrides: {
+        maxBranches: limitOverrides.maxBranches ?? null,
+        maxStaff: limitOverrides.maxStaff ?? null,
+        maxTables: limitOverrides.maxTables ?? null,
+      },
+      planLimits,
       createdAt: (restaurant as { createdAt?: Date }).createdAt ?? null,
     },
     usage: {
       branches: branches.length,
       staff: staffCount,
       tables: tableCount,
-      limits: limits ?? PLAN_CATALOG.STARTER.limits,
+      limits,
+      planLimits,
     },
     branches: branches.map((b) => ({
       id: b._id.toString(),
@@ -104,6 +146,10 @@ export const GET = withPlatformAuth(async ({ req }) => {
       isActive: o.isActive,
     })),
     staffCount,
+    moduleCatalog: MODULE_IDS.map((mid) => ({
+      id: mid,
+      enabled: modules[mid],
+    })),
   });
 });
 
@@ -136,8 +182,71 @@ export const PATCH = withPlatformAuth(async ({ req }) => {
     restaurant.contactPhone = body.contactPhone;
   if (body.address !== undefined) restaurant.address = body.address;
   if (body.name !== undefined) restaurant.name = body.name.trim();
+  if (body.qrOrderingEnabled !== undefined)
+    restaurant.qrOrderingEnabled = body.qrOrderingEnabled;
+
+  if (body.extendDays != null) {
+    const base =
+      restaurant.trialEndsAt && restaurant.trialEndsAt.getTime() > Date.now()
+        ? new Date(restaurant.trialEndsAt)
+        : new Date();
+    base.setDate(base.getDate() + body.extendDays);
+    restaurant.trialEndsAt = base;
+    if (restaurant.billingStatus === "CANCELLED") {
+      restaurant.billingStatus = "TRIAL";
+    }
+  }
+
+  if (body.trialEndsAt !== undefined) {
+    if (body.trialEndsAt === null) {
+      restaurant.trialEndsAt = null;
+    } else {
+      const d = new Date(body.trialEndsAt);
+      if (!Number.isNaN(d.getTime())) restaurant.trialEndsAt = d;
+    }
+  }
+
+  if (body.resetModules) {
+    restaurant.modules = defaultModulesForPlan(restaurant.plan) as never;
+  } else if (body.enableAllModules) {
+    restaurant.modules = defaultModulesForPlan("ENTERPRISE") as never;
+  } else if (body.modules) {
+    const current = resolveModules(
+      restaurant.plan,
+      restaurant.modules as Record<string, boolean>
+    );
+    for (const [key, val] of Object.entries(body.modules)) {
+      if (MODULE_IDS.includes(key as ModuleId) && typeof val === "boolean") {
+        current[key as ModuleId] = val;
+      }
+    }
+    restaurant.modules = current as never;
+    restaurant.markModified("modules");
+  }
+
+  if (body.limitOverrides) {
+    const lo = restaurant.limitOverrides || {
+      maxBranches: null,
+      maxStaff: null,
+      maxTables: null,
+    };
+    if (body.limitOverrides.maxBranches !== undefined)
+      lo.maxBranches = body.limitOverrides.maxBranches;
+    if (body.limitOverrides.maxStaff !== undefined)
+      lo.maxStaff = body.limitOverrides.maxStaff;
+    if (body.limitOverrides.maxTables !== undefined)
+      lo.maxTables = body.limitOverrides.maxTables;
+    restaurant.limitOverrides = lo;
+  }
 
   await restaurant.save();
+
+  const modules = resolveModules(
+    restaurant.plan,
+    restaurant.modules as Record<string, boolean>
+  );
+  const planLimits = limitsForPlan(restaurant.plan);
+  const limits = resolveLimits(planLimits, restaurant.limitOverrides);
 
   return json({
     restaurant: {
@@ -147,9 +256,14 @@ export const PATCH = withPlatformAuth(async ({ req }) => {
       status: restaurant.status,
       plan: restaurant.plan,
       billingStatus: restaurant.billingStatus,
+      trialEndsAt: restaurant.trialEndsAt,
       contactEmail: restaurant.contactEmail,
       contactPhone: restaurant.contactPhone,
       address: restaurant.address,
+      qrOrderingEnabled: restaurant.qrOrderingEnabled,
+      modules,
+      limitOverrides: restaurant.limitOverrides,
+      limits,
     },
   });
 });

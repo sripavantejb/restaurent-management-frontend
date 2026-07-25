@@ -8,6 +8,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { NotificationBell } from "@/components/NotificationBell";
 import { SessionSkeleton, Skeleton } from "@/components/ui/Skeleton";
+import { ModuleGate } from "@/components/ModuleGate";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { loading, user, restaurant } = useAuth();
@@ -51,7 +52,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <NotificationBell />
           <ThemeToggle />
         </header>
-        <main className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain">{children}</main>
+        <main className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain">
+          <ModuleGate>{children}</ModuleGate>
+        </main>
       </div>
     </div>
   );

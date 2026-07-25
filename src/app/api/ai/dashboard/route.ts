@@ -45,8 +45,10 @@ export const GET = withAuth(async ({ tenant, user }) => {
       profitBlocks: profit?.blocks ?? [],
     },
     suggestions: SUGGESTED_PROMPTS,
-    openaiConfigured: Boolean(process.env.OPENAI_API_KEY?.trim()),
-    llmProvider: process.env.OPENAI_API_KEY?.trim()
+    openaiConfigured: Boolean(
+      process.env.OPENAI_API_KEY?.replace(/^\uFEFF/, "").trim()
+    ),
+    llmProvider: process.env.OPENAI_API_KEY?.replace(/^\uFEFF/, "").trim()
       ? ("openai" as const)
       : process.env.NVIDIA_API_KEY?.trim() || process.env.NGC_API_KEY?.trim()
         ? ("nvidia" as const)

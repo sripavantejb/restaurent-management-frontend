@@ -13,7 +13,12 @@ function nvidiaKey() {
 }
 
 function openaiKey() {
-  return process.env.OPENAI_API_KEY?.trim() || "";
+  // Strip accidental BOM / quotes from .env.local (Windows PowerShell UTF-8 BOM)
+  const raw =
+    process.env.OPENAI_API_KEY?.replace(/^\uFEFF/, "").trim() ||
+    process.env["OPENAI_API_KEY"]?.trim() ||
+    "";
+  return raw.replace(/^["']|["']$/g, "");
 }
 
 /** Chat / answer polish — prefer OpenAI when keyed (more reliable than NIM empty streams). */

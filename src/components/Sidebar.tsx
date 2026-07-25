@@ -34,23 +34,24 @@ const NAV: {
   label: string;
   permission: Permission;
   icon: typeof LayoutDashboard;
+  module?: import("@/lib/platform/modules").ModuleId;
 }[] = [
   { href: "/dashboard", label: "Dashboard", permission: "reports.view", icon: LayoutDashboard },
-  { href: "/ai", label: "AI Copilot", permission: "ai.use", icon: Sparkles },
-  { href: "/pos", label: "POS", permission: "pos.bill", icon: ShoppingCart },
-  { href: "/kds", label: "KDS", permission: "kds.view", icon: ChefHat },
-  { href: "/orders", label: "Orders", permission: "orders.view", icon: ClipboardList },
-  { href: "/menu", label: "Menu", permission: "menu.view", icon: UtensilsCrossed },
-  { href: "/inventory", label: "Inventory", permission: "inventory.view", icon: Package },
-  { href: "/tables", label: "Tables", permission: "tables.view", icon: Grid3X3 },
-  { href: "/reservations", label: "Reservations", permission: "tables.view", icon: CalendarDays },
-  { href: "/crm", label: "CRM", permission: "reports.view", icon: Heart },
-  { href: "/finance", label: "Finance", permission: "reports.view", icon: Wallet },
-  { href: "/hr", label: "HR", permission: "users.manage", icon: UserCheck },
-  { href: "/marketing", label: "Marketing", permission: "reports.view", icon: Megaphone },
-  { href: "/reports", label: "Reports", permission: "reports.view", icon: BarChart3 },
-  { href: "/staff", label: "Waiters", permission: "users.manage", icon: Users },
-  { href: "/qr", label: "QR", permission: "qr.manage", icon: QrCode },
+  { href: "/ai", label: "AI Copilot", permission: "ai.use", icon: Sparkles, module: "ai" },
+  { href: "/pos", label: "POS", permission: "pos.bill", icon: ShoppingCart, module: "pos" },
+  { href: "/kds", label: "KDS", permission: "kds.view", icon: ChefHat, module: "kds" },
+  { href: "/orders", label: "Orders", permission: "orders.view", icon: ClipboardList, module: "orders" },
+  { href: "/menu", label: "Menu", permission: "menu.view", icon: UtensilsCrossed, module: "menu" },
+  { href: "/inventory", label: "Inventory", permission: "inventory.view", icon: Package, module: "inventory" },
+  { href: "/tables", label: "Tables", permission: "tables.view", icon: Grid3X3, module: "tables" },
+  { href: "/reservations", label: "Reservations", permission: "tables.view", icon: CalendarDays, module: "reservations" },
+  { href: "/crm", label: "CRM", permission: "reports.view", icon: Heart, module: "crm" },
+  { href: "/finance", label: "Finance", permission: "reports.view", icon: Wallet, module: "finance" },
+  { href: "/hr", label: "HR", permission: "users.manage", icon: UserCheck, module: "hr" },
+  { href: "/marketing", label: "Marketing", permission: "reports.view", icon: Megaphone, module: "marketing" },
+  { href: "/reports", label: "Reports", permission: "reports.view", icon: BarChart3, module: "reports" },
+  { href: "/staff", label: "Waiters", permission: "users.manage", icon: Users, module: "staff" },
+  { href: "/qr", label: "QR", permission: "qr.manage", icon: QrCode, module: "qr" },
   { href: "/settings", label: "Setup", permission: "qr.manage", icon: Settings },
 ];
 
@@ -62,10 +63,12 @@ export function Sidebar({
   onClose?: () => void;
 }) {
   const pathname = usePathname();
-  const { user, restaurant, branches, activeBranchId, setActiveBranchId, logout, hasPermission } =
+  const { user, restaurant, branches, activeBranchId, setActiveBranchId, logout, hasPermission, hasModule } =
     useAuth();
 
-  const items = NAV.filter((n) => hasPermission(n.permission));
+  const items = NAV.filter(
+    (n) => hasPermission(n.permission) && hasModule(n.module ?? null)
+  );
 
   return (
     <>

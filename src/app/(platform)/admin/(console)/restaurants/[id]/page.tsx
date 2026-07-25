@@ -7,12 +7,18 @@ import { platformFetch } from "@/components/PlatformAuthProvider";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { Input } from "@/components/ui/Input";
 import {
   RESTAURANT_STATUS_LABEL,
   PLAN_LABEL,
   BILLING_STATUS_LABEL,
   label,
 } from "@/lib/labels";
+import {
+  MODULE_IDS,
+  MODULE_LABELS,
+  type ModuleId,
+} from "@/lib/platform/modules";
 import { DetailPageSkeleton } from "@/components/ui/Skeleton";
 
 interface Detail {
@@ -34,12 +40,29 @@ interface Detail {
     currency: string;
     timezone: string;
     createdAt: string | null;
+    qrOrderingEnabled: boolean;
+    modules: Record<ModuleId, boolean>;
+    limitOverrides: {
+      maxBranches: number | null;
+      maxStaff: number | null;
+      maxTables: number | null;
+    };
+    planLimits: {
+      maxBranches: number;
+      maxStaff: number;
+      maxTables: number;
+    };
   };
   usage: {
     branches: number;
     staff: number;
     tables: number;
     limits: {
+      maxBranches: number;
+      maxStaff: number;
+      maxTables: number;
+    };
+    planLimits: {
       maxBranches: number;
       maxStaff: number;
       maxTables: number;
@@ -93,12 +116,35 @@ export default function RestaurantDetailPage() {
   const [busy, setBusy] = useState(false);
   const [checkoutPlan, setCheckoutPlan] = useState("GROWTH");
   const [checkoutMsg, setCheckoutMsg] = useState("");
+  const [contact, setContact] = useState({
+    name: "",
+    address: "",
+    contactEmail: "",
+    contactPhone: "",
+  });
+  const [limitsForm, setLimitsForm] = useState({
+    maxBranches: "",
+    maxStaff: "",
+    maxTables: "",
+  });
 
   const load = useCallback(async () => {
     try {
       const res = await platformFetch(`/api/platform/restaurants/${id}`);
       setData(res);
       setCheckoutPlan(res.restaurant.plan || "STARTER");
+      setContact({
+        name: res.restaurant.name || "",
+        address: res.restaurant.address || "",
+        contactEmail: res.restaurant.contactEmail || "",
+        contactPhone: res.restaurant.contactPhone || "",
+      });
+      const lo = res.restaurant.limitOverrides || {};
+      setLimitsForm({
+        maxBranches: lo.maxBranches != null ? String(lo.maxBranches) : "",
+        maxStaff: lo.maxStaff != null ? String(lo.maxStaff) : "",
+        maxTables: lo.maxTables != null ? String(lo.maxTables) : "",
+      });
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load");
@@ -109,31 +155,16 @@ export default function RestaurantDetailPage() {
     void load();
   }, [load]);
 
-  async function setStatus(status: string) {
+  async function patch(body: Record<string, unknown>) {
     setBusy(true);
     try {
       await platformFetch(`/api/platform/restaurants/${id}`, {
         method: "PATCH",
-        body: JSON.stringify({ status }),
+        body: JSON.stringify(body),
       });
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Update failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function setPlan(plan: string) {
-    setBusy(true);
-    try {
-      await platformFetch(`/api/platform/restaurants/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ plan }),
-      });
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Plan update failed");
     } finally {
       setBusy(false);
     }
@@ -156,7 +187,9 @@ export default function RestaurantDetailPage() {
           "Razorpay checkout opened. After payment, webhook will mark billing Active."
         );
       } else {
-        setCheckoutMsg(`Subscription ${res.subscriptionId} created (${res.status}).`);
+        setCheckoutMsg(
+          `Subscription ${res.subscriptionId} created (${res.status}).`
+        );
       }
       await load();
     } catch (e) {
@@ -215,7 +248,7 @@ export default function RestaurantDetailPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           {restaurant.status !== "ACTIVE" ? (
-            <Button disabled={busy} onClick={() => void setStatus("ACTIVE")}>
+            <Button disabled={busy} onClick={() => void patch({ status: "ACTIVE" })}>
               Activate
             </Button>
           ) : null}
@@ -223,7 +256,7 @@ export default function RestaurantDetailPage() {
             <Button
               variant="secondary"
               disabled={busy}
-              onClick={() => void setStatus("PENDING")}
+              onClick={() => void patch({ status: "PENDING" })}
             >
               Mark pending
             </Button>
@@ -232,7 +265,7 @@ export default function RestaurantDetailPage() {
             <Button
               variant="danger"
               disabled={busy}
-              onClick={() => void setStatus("SUSPENDED")}
+              onClick={() => void patch({ status: "SUSPENDED" })}
             >
               Suspend
             </Button>
@@ -249,17 +282,17 @@ export default function RestaurantDetailPage() {
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
         <Card className="p-5">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
-            Billing
+            Billing & trial
           </h2>
           <dl className="mt-4 space-y-3 text-sm">
             <div>
               <dt className="text-xs text-[var(--muted)]">Plan</dt>
-              <dd className="mt-1 flex flex-wrap items-center gap-2">
+              <dd className="mt-1">
                 <select
                   className="h-9 rounded-[6px] border border-[var(--border)] bg-white px-2 text-sm"
                   value={restaurant.plan}
                   disabled={busy}
-                  onChange={(e) => void setPlan(e.target.value)}
+                  onChange={(e) => void patch({ plan: e.target.value })}
                 >
                   <option value="STARTER">Starter</option>
                   <option value="GROWTH">Growth</option>
@@ -269,27 +302,53 @@ export default function RestaurantDetailPage() {
             </div>
             <div>
               <dt className="text-xs text-[var(--muted)]">Billing status</dt>
-              <dd>{label(BILLING_STATUS_LABEL, restaurant.billingStatus)}</dd>
+              <dd className="mt-1">
+                <select
+                  className="h-9 rounded-[6px] border border-[var(--border)] bg-white px-2 text-sm"
+                  value={restaurant.billingStatus}
+                  disabled={busy}
+                  onChange={(e) =>
+                    void patch({ billingStatus: e.target.value })
+                  }
+                >
+                  <option value="TRIAL">Trial</option>
+                  <option value="ACTIVE">Active</option>
+                  <option value="PAST_DUE">Past due</option>
+                  <option value="CANCELLED">Cancelled</option>
+                </select>
+              </dd>
             </div>
             <div>
               <dt className="text-xs text-[var(--muted)]">Trial ends</dt>
-              <dd>{fmtDate(restaurant.trialEndsAt)}</dd>
+              <dd className="mt-1 flex flex-wrap items-center gap-2">
+                <span>{fmtDate(restaurant.trialEndsAt)}</span>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={() => void patch({ extendDays: 7 })}
+                >
+                  +7 days
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={() => void patch({ extendDays: 14 })}
+                >
+                  +14 days
+                </Button>
+              </dd>
             </div>
             <div>
               <dt className="text-xs text-[var(--muted)]">Current period end</dt>
               <dd>{fmtDate(restaurant.currentPeriodEnd)}</dd>
             </div>
-            <div>
-              <dt className="text-xs text-[var(--muted)]">Usage vs limits</dt>
-              <dd className="num mt-1 text-[var(--muted)]">
-                Branches {usage.branches}/{fmtLimit(usage.limits.maxBranches)} ·
-                Staff {usage.staff}/{fmtLimit(usage.limits.maxStaff)} · Tables{" "}
-                {usage.tables}/{fmtLimit(usage.limits.maxTables)}
-              </dd>
-            </div>
             {restaurant.razorpaySubscriptionId ? (
               <div>
-                <dt className="text-xs text-[var(--muted)]">Razorpay subscription</dt>
+                <dt className="text-xs text-[var(--muted)]">
+                  Razorpay subscription
+                </dt>
                 <dd className="num break-all text-xs">
                   {restaurant.razorpaySubscriptionId}
                 </dd>
@@ -324,42 +383,181 @@ export default function RestaurantDetailPage() {
 
         <Card className="p-5">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
-            Tenant details
+            Lifecycle & contact
           </h2>
-          <dl className="mt-4 space-y-3 text-sm">
-            <div>
-              <dt className="text-xs text-[var(--muted)]">Address</dt>
-              <dd>{restaurant.address || "—"}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-[var(--muted)]">GST</dt>
-              <dd className="num">{restaurant.gstNumber || "—"}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-[var(--muted)]">Contact</dt>
-              <dd>
-                {restaurant.contactEmail || "—"}
-                {restaurant.contactPhone ? ` · ${restaurant.contactPhone}` : ""}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-[var(--muted)]">Locale</dt>
-              <dd>
-                {restaurant.currency} · {restaurant.timezone}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-[var(--muted)]">Staff accounts</dt>
-              <dd className="num">{staffCount}</dd>
-              <p className="mt-2 text-xs text-[var(--muted)]">
-                Day-to-day waiter accounts and performance live in the restaurant
-                console under Waiters (owner/manager login).
-              </p>
-            </div>
-          </dl>
+          <div className="mt-4 grid gap-3 text-sm">
+            <label className="text-xs text-[var(--muted)]">
+              Name
+              <Input
+                className="mt-1"
+                value={contact.name}
+                onChange={(e) =>
+                  setContact((c) => ({ ...c, name: e.target.value }))
+                }
+              />
+            </label>
+            <label className="text-xs text-[var(--muted)]">
+              Address
+              <Input
+                className="mt-1"
+                value={contact.address}
+                onChange={(e) =>
+                  setContact((c) => ({ ...c, address: e.target.value }))
+                }
+              />
+            </label>
+            <label className="text-xs text-[var(--muted)]">
+              Contact email
+              <Input
+                className="mt-1"
+                value={contact.contactEmail}
+                onChange={(e) =>
+                  setContact((c) => ({ ...c, contactEmail: e.target.value }))
+                }
+              />
+            </label>
+            <label className="text-xs text-[var(--muted)]">
+              Contact phone
+              <Input
+                className="mt-1"
+                value={contact.contactPhone}
+                onChange={(e) =>
+                  setContact((c) => ({ ...c, contactPhone: e.target.value }))
+                }
+              />
+            </label>
+            <Button
+              disabled={busy}
+              onClick={() =>
+                void patch({
+                  name: contact.name,
+                  address: contact.address,
+                  contactEmail: contact.contactEmail,
+                  contactPhone: contact.contactPhone,
+                })
+              }
+            >
+              Save contact
+            </Button>
+            <p className="text-xs text-[var(--muted)]">
+              GST {restaurant.gstNumber || "—"} · {restaurant.currency} ·{" "}
+              {restaurant.timezone}
+            </p>
+          </div>
         </Card>
 
         <Card className="p-5 lg:col-span-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
+              Modules
+            </h2>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={busy}
+                onClick={() => void patch({ enableAllModules: true })}
+              >
+                Enable all
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={busy}
+                onClick={() => void patch({ resetModules: true })}
+              >
+                Reset to plan defaults
+              </Button>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
+            {MODULE_IDS.map((mid) => {
+              const on = restaurant.modules?.[mid] !== false;
+              return (
+                <label
+                  key={mid}
+                  className="flex items-center gap-2 rounded-[6px] border border-[var(--border)] px-3 py-2 text-sm"
+                >
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    disabled={busy}
+                    onChange={(e) =>
+                      void patch({ modules: { [mid]: e.target.checked } })
+                    }
+                  />
+                  {MODULE_LABELS[mid]}
+                </label>
+              );
+            })}
+          </div>
+          <label className="mt-4 flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={restaurant.qrOrderingEnabled}
+              disabled={busy}
+              onChange={(e) =>
+                void patch({ qrOrderingEnabled: e.target.checked })
+              }
+            />
+            Guest QR ordering enabled
+          </label>
+        </Card>
+
+        <Card className="p-5">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
+            Limit overrides
+          </h2>
+          <p className="mt-2 text-xs text-[var(--muted)]">
+            Leave blank to use plan defaults. Use -1 for unlimited.
+          </p>
+          <p className="num mt-2 text-xs text-[var(--muted)]">
+            Effective: Branches {usage.branches}/{fmtLimit(usage.limits.maxBranches)} ·
+            Staff {usage.staff}/{fmtLimit(usage.limits.maxStaff)} · Tables{" "}
+            {usage.tables}/{fmtLimit(usage.limits.maxTables)}
+          </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            {(
+              [
+                ["maxBranches", "Max branches"],
+                ["maxStaff", "Max staff"],
+                ["maxTables", "Max tables"],
+              ] as const
+            ).map(([key, lab]) => (
+              <label key={key} className="text-xs text-[var(--muted)]">
+                {lab}
+                <Input
+                  className="mt-1"
+                  inputMode="numeric"
+                  placeholder={`Plan: ${fmtLimit(restaurant.planLimits[key])}`}
+                  value={limitsForm[key]}
+                  onChange={(e) =>
+                    setLimitsForm((f) => ({ ...f, [key]: e.target.value }))
+                  }
+                />
+              </label>
+            ))}
+          </div>
+          <Button
+            className="mt-4"
+            disabled={busy}
+            onClick={() => {
+              const parse = (v: string) =>
+                v.trim() === "" ? null : Number.parseInt(v, 10);
+              void patch({
+                limitOverrides: {
+                  maxBranches: parse(limitsForm.maxBranches),
+                  maxStaff: parse(limitsForm.maxStaff),
+                  maxTables: parse(limitsForm.maxTables),
+                },
+              });
+            }}
+          >
+            Save limits
+          </Button>
+        </Card>
+
+        <Card className="p-5">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
             Owners
           </h2>
@@ -375,6 +573,9 @@ export default function RestaurantDetailPage() {
               ))
             )}
           </ul>
+          <p className="mt-3 text-xs text-[var(--muted)]">
+            Staff accounts: {staffCount}
+          </p>
         </Card>
       </div>
 

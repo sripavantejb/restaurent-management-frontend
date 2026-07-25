@@ -329,6 +329,9 @@ export default function AiCopilotPage() {
       { id: assistantId, role: "assistant", content: "", blocks: [] },
     ]);
 
+    let gotDelta = false;
+    let gotBlock = false;
+
     try {
       const res = await fetch("/api/ai/chat", {
         method: "POST",
@@ -343,8 +346,15 @@ export default function AiCopilotPage() {
         credentials: "include",
       });
 
-      if (!res.ok || !res.body) {
-        throw new Error("Chat stream failed");
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(
+          (errBody as { error?: string }).error ||
+            `Chat failed (${res.status})`
+        );
+      }
+      if (!res.body) {
+        throw new Error("Chat stream empty — restart the Next.js server");
       }
 
       const reader = res.body.getReader();
@@ -359,28 +369,60 @@ export default function AiCopilotPage() {
         const parts = buffer.split("\n\n");
         buffer = parts.pop() ?? "";
         for (const part of parts) {
-          const line = part.trim();
-          if (!line.startsWith("data:")) continue;
-          const payload = JSON.parse(line.slice(5).trim()) as {
+          const line = part
+            .split("\n")
+            .map((l) => l.trim())
+            .find((l) => l.startsWith("data:"));
+          if (!line) continue;
+          let payload: {
             type: string;
             content?: string;
             block?: Block;
             conversationId?: string;
             error?: string;
+            tool?: string;
           };
+          try {
+            payload = JSON.parse(line.slice(5).trim());
+          } catch {
+            continue;
+          }
           if (payload.type === "conversation" && payload.conversationId) {
             setActiveId(payload.conversationId);
           }
-          if (payload.type === "delta" && payload.content) {
+          if (payload.type === "status" && payload.content) {
             setMessages((prev) =>
               prev.map((m) =>
-                m.id === assistantId
-                  ? { ...m, content: m.content + payload.content }
+                m.id === assistantId && !m.content
+                  ? { ...m, content: `_${payload.content}_` }
                   : m
               )
             );
           }
+          if (payload.type === "tool_start" && payload.tool) {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantId && !gotDelta
+                  ? { ...m, content: `_Running ${payload.tool}…_` }
+                  : m
+              )
+            );
+          }
+          if (payload.type === "delta" && payload.content) {
+            gotDelta = true;
+            setMessages((prev) =>
+              prev.map((m) => {
+                if (m.id !== assistantId) return m;
+                const base =
+                  m.content.startsWith("_") && m.content.endsWith("_")
+                    ? ""
+                    : m.content;
+                return { ...m, content: base + payload.content };
+              })
+            );
+          }
           if (payload.type === "block" && payload.block) {
+            gotBlock = true;
             blocks = [...blocks, payload.block];
             setMessages((prev) =>
               prev.map((m) =>
@@ -393,9 +435,43 @@ export default function AiCopilotPage() {
           }
         }
       }
+
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.id !== assistantId) return m;
+          const empty =
+            !m.content.trim() ||
+            (m.content.startsWith("_") && m.content.endsWith("_"));
+          if (empty && !gotBlock) {
+            return {
+              ...m,
+              content:
+                "No answer came back. Restart `npm run dev` so OPENAI_API_KEY loads, then try again.",
+            };
+          }
+          if (empty && gotBlock) {
+            return {
+              ...m,
+              content: "Live data loaded below.",
+            };
+          }
+          return m;
+        })
+      );
       void loadConversations();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Send failed");
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantId && !m.content.trim()
+            ? {
+                ...m,
+                content:
+                  "Something went wrong talking to the server. Check you are logged in and the API is running.",
+              }
+            : m
+        )
+      );
     } finally {
       setBusy(false);
     }

@@ -3,12 +3,14 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Store, LogOut, Plus, Menu, X } from "lucide-react";
+import { LayoutDashboard, Store, LogOut, Plus, Menu, X, CreditCard, Puzzle } from "lucide-react";
 import { usePlatformAuth } from "@/components/PlatformAuthProvider";
 
 const NAV = [
   { href: "/admin", label: "Overview", icon: LayoutDashboard, exact: true },
   { href: "/admin/restaurants", label: "Restaurants", icon: Store, exact: false },
+  { href: "/admin/billing", label: "Billing", icon: CreditCard, exact: false },
+  { href: "/admin/modules", label: "Modules", icon: Puzzle, exact: false },
 ];
 
 export function PlatformSidebar({

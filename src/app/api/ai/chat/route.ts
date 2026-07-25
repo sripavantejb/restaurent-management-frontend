@@ -3,6 +3,9 @@ import { withAuth, error } from "@/lib/api";
 import type { AiTenantCtx } from "@/modules/ai-copilot/types";
 import { handleCopilotChat } from "@/modules/ai-copilot/gateway/chat";
 
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
 export const POST = withAuth(async ({ req, tenant, user }) => {
   let body: { message?: string; conversationId?: string };
   try {

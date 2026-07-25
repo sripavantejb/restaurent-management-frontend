@@ -47,6 +47,12 @@ export default function RestaurantsListPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const s = sp.get("status");
+    if (s) setStatus(s);
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {

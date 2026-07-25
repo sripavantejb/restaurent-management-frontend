@@ -20,13 +20,18 @@ export async function executeTool(input: {
   }
 
   if (!def.permissions.some((p) => input.ctx.permissions.includes(p))) {
-    const result: ToolResult = {
-      ok: false,
-      summary: `Permission denied for ${input.toolName}. Requires one of: ${def.permissions.join(", ")}.`,
-      error: "forbidden",
-    };
-    await logAudit(input, result, Date.now() - started, {});
-    return result;
+    // Read tools: allow with ai.use so Copilot works for all staff roles
+    const canAiRead =
+      !def.isAction && input.ctx.permissions.includes("ai.use");
+    if (!canAiRead) {
+      const result: ToolResult = {
+        ok: false,
+        summary: `Permission denied for ${input.toolName}. Requires one of: ${def.permissions.join(", ")}.`,
+        error: "forbidden",
+      };
+      await logAudit(input, result, Date.now() - started, {});
+      return result;
+    }
   }
 
   if (def.isAction && !input.ctx.permissions.includes("ai.actions")) {

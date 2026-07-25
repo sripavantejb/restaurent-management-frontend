@@ -10,6 +10,8 @@ import {
 } from "react";
 import type { Permission, Role } from "@/lib/rbac";
 import { apiUrl } from "@/lib/api-url";
+import type { ModuleId, ModuleMap } from "@/lib/platform/modules";
+import { isModuleEnabled, moduleForPath } from "@/lib/platform/modules";
 
 export interface AuthUser {
   id: string;
@@ -27,9 +29,19 @@ export interface BranchInfo {
   code: string;
 }
 
+export interface AuthRestaurant {
+  id: string;
+  name: string;
+  currency: string;
+  logoUrl?: string;
+  plan?: string;
+  modules?: ModuleMap | null;
+  qrOrderingEnabled?: boolean;
+}
+
 interface AuthState {
   user: AuthUser | null;
-  restaurant: { id: string; name: string; currency: string } | null;
+  restaurant: AuthRestaurant | null;
   branches: BranchInfo[];
   activeBranchId: string | null;
   loading: boolean;
@@ -37,6 +49,8 @@ interface AuthState {
   refresh: () => Promise<void>;
   logout: () => Promise<void>;
   hasPermission: (p: Permission) => boolean;
+  hasModule: (moduleId: ModuleId | null) => boolean;
+  isPathModuleEnabled: (pathname: string) => boolean;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -45,7 +59,7 @@ const BRANCH_KEY = "ros_active_branch";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [restaurant, setRestaurant] = useState<AuthState["restaurant"]>(null);
+  const [restaurant, setRestaurant] = useState<AuthRestaurant | null>(null);
   const [branches, setBranches] = useState<BranchInfo[]>([]);
   const [activeBranchId, setActiveBranchIdState] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -104,6 +118,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const hasPermission = (p: Permission) =>
     !!user?.permissions.includes(p);
 
+  const hasModule = (moduleId: ModuleId | null) =>
+    isModuleEnabled(restaurant?.modules ?? null, moduleId);
+
+  const isPathModuleEnabled = (pathname: string) =>
+    hasModule(moduleForPath(pathname));
+
   return (
     <AuthContext.Provider
       value={{
@@ -116,6 +136,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         refresh,
         logout,
         hasPermission,
+        hasModule,
+        isPathModuleEnabled,
       }}
     >
       {children}
