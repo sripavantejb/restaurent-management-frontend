@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch, useAuth } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/Button";
+import { TablePageSkeleton } from "@/components/ui/Skeleton";
+import { apiUrl } from "@/lib/api-url";
 
 export default function HrPage() {
   const { activeBranchId, hasPermission } = useAuth();
@@ -17,14 +19,19 @@ export default function HrPage() {
       checkOutAt: string | null;
     }[]
   >([]);
+  const [ready, setReady] = useState(false);
 
   const load = useCallback(async () => {
     if (!activeBranchId) return;
-    const data = await apiFetch("/api/hr/attendance", {
-      branchId: activeBranchId,
-    });
-    setDate(data.date);
-    setRows(data.attendance);
+    try {
+      const data = await apiFetch("/api/hr/attendance", {
+        branchId: activeBranchId,
+      });
+      setDate(data.date);
+      setRows(data.attendance);
+    } finally {
+      setReady(true);
+    }
   }, [activeBranchId]);
 
   useEffect(() => {
@@ -39,10 +46,47 @@ export default function HrPage() {
     );
   }
 
+  if (!ready) return <TablePageSkeleton />;
+
   return (
     <div className="space-y-4 p-4 sm:p-6">
       <h1 className="text-2xl font-semibold tracking-tight">HR · Attendance</h1>
       <p className="text-sm text-[var(--muted)]">Today · {date}</p>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant="secondary"
+          onClick={async () => {
+            const period = new Date().toISOString().slice(0, 7);
+            await apiFetch("/api/hr/payroll", {
+              method: "POST",
+              branchId: activeBranchId,
+              body: "{}",
+            });
+            const res = await fetch(
+              apiUrl(`/api/hr/payroll?format=csv&period=${period}`),
+              {
+                credentials: "include",
+                headers: activeBranchId
+                  ? { "x-branch-id": activeBranchId }
+                  : undefined,
+              }
+            );
+            if (!res.ok) {
+              window.alert("Payroll export failed");
+              return;
+            }
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `payroll-${period}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+          }}
+        >
+          Build payroll + export CSV
+        </Button>
+      </div>
       <ul className="space-y-2">
         {rows.map((r) => (
           <li

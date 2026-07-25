@@ -17,6 +17,7 @@ import {
 import { apiFetch, useAuth } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { ConsolePageSkeleton } from "@/components/ui/Skeleton";
 import { SUGGESTED_PROMPTS } from "@/modules/ai-copilot/prompts";
 
 type Block = { type: string; title?: string; data: unknown };
@@ -220,6 +221,7 @@ export default function AiCopilotPage() {
   const canManageKnowledge =
     user?.role === "OWNER" || user?.role === "MANAGER";
   const [dash, setDash] = useState<Dash | null>(null);
+  const [ready, setReady] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -244,6 +246,8 @@ export default function AiCopilotPage() {
       setDash(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Dashboard failed");
+    } finally {
+      setReady(true);
     }
   }, [activeBranchId, canUse]);
 
@@ -533,10 +537,14 @@ export default function AiCopilotPage() {
     );
   }
 
+  if (!ready) {
+    return <ConsolePageSkeleton />;
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col lg:flex-row">
-      {/* Sidebar chats */}
-      <aside className="flex w-full shrink-0 flex-col border-b border-[var(--border)] lg:w-64 lg:border-b-0 lg:border-r">
+      {/* Sidebar chats — compact on mobile */}
+      <aside className="flex max-h-[38vh] w-full shrink-0 flex-col border-b border-[var(--border)] lg:max-h-none lg:w-64 lg:border-b-0 lg:border-r">
         <div className="flex items-center gap-2 border-b border-[var(--border)] p-3">
           <Sparkles size={16} className="text-[var(--accent)]" />
           <span className="text-sm font-semibold">AI Copilot</span>
@@ -563,7 +571,7 @@ export default function AiCopilotPage() {
             />
           </div>
         </div>
-        <ul className="max-h-40 flex-1 overflow-auto px-2 pb-2 lg:max-h-none">
+        <ul className="min-h-0 flex-1 overflow-auto px-2 pb-2">
           {conversations.map((c) => (
             <li key={c.id}>
               <div
@@ -613,12 +621,13 @@ export default function AiCopilotPage() {
                 Restaurant AI Operating System
               </h1>
               <p className="text-xs text-[var(--muted)]">
-                Tools → business services → MongoDB. LLM never queries the DB.
-                {dash && !dash.openaiConfigured
-                  ? " · Local tool mode (add NVIDIA_API_KEY or OPENAI_API_KEY)."
-                  : dash?.llmProvider === "nvidia"
-                    ? " · NVIDIA NIM connected."
-                    : " · OpenAI connected."}
+                Live Mongo tools first
+                {dash?.openaiConfigured
+                  ? ", then OpenAI polish."
+                  : " (add OPENAI_API_KEY to polish answers)."}
+                {dash?.widgets.floor
+                  ? ` · Floor: ${dash.widgets.floor}`
+                  : ""}
               </p>
             </div>
           </div>
@@ -717,7 +726,7 @@ export default function AiCopilotPage() {
         ) : null}
 
         {/* Composer */}
-        <div className="shrink-0 border-t border-[var(--border)] p-3">
+        <div className="shrink-0 border-t border-[var(--border)] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <form
             className="mx-auto flex max-w-3xl items-end gap-2"
             onSubmit={(e) => {
@@ -727,14 +736,14 @@ export default function AiCopilotPage() {
           >
             <button
               type="button"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-[6px] border border-[var(--border)] text-[var(--muted)] hover:bg-[var(--surface-2)]"
+              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[6px] border border-[var(--border)] text-[var(--muted)] hover:bg-[var(--surface-2)] sm:h-10 sm:w-10"
               onClick={startVoice}
               aria-label="Voice input"
             >
               <Mic size={16} />
             </button>
             <textarea
-              className="min-h-[42px] flex-1 resize-none rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
+              className="min-h-[44px] flex-1 resize-none rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm outline-none focus:border-[var(--accent)]"
               rows={1}
               placeholder="Ask anything about your restaurant…"
               value={input}
@@ -746,7 +755,7 @@ export default function AiCopilotPage() {
                 }
               }}
             />
-            <Button type="submit" disabled={busy || !input.trim()}>
+            <Button type="submit" disabled={busy || !input.trim()} className="h-11 shrink-0 sm:h-10">
               <Send size={16} />
             </Button>
           </form>
@@ -754,7 +763,7 @@ export default function AiCopilotPage() {
       </div>
 
       {/* Knowledge panel */}
-      <aside className="flex w-full shrink-0 flex-col border-t border-[var(--border)] lg:w-72 lg:border-t-0 lg:border-l">
+      <aside className="flex max-h-[32vh] w-full shrink-0 flex-col border-t border-[var(--border)] lg:max-h-none lg:w-72 lg:border-t-0 lg:border-l">
         <div className="flex items-center gap-2 border-b border-[var(--border)] p-3">
           <BookOpen size={16} className="text-[var(--accent)]" />
           <span className="text-sm font-semibold">Knowledge</span>

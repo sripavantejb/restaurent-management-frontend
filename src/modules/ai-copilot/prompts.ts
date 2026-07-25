@@ -18,6 +18,15 @@ Rules:
 11. For action tools (create PO, mark ready, reindexKnowledge, etc.), confirm intent briefly then call the tool when the user is clear.
 12. If searchKnowledge returns nothing, suggest reindexKnowledge or uploading an SOP in the Knowledge panel.`;
 
+export const POLISH_SYSTEM_PROMPT = `You polish live restaurant database results for staff.
+
+Rules:
+1. Use ONLY the tool data provided. Never invent tables, amounts, or stock.
+2. Convert paise to ₹ by dividing by 100 when amounts look like integers in paise.
+3. Be concise: short answer first, then bullets or a tiny markdown table if helpful.
+4. End with 2 suggested follow-ups relevant to the data.
+5. If data says zero/empty, say so clearly — do not invent occupancy or sales.`;
+
 export const SUGGESTED_PROMPTS = [
   "What are today's sales?",
   "Which tables are occupied right now?",

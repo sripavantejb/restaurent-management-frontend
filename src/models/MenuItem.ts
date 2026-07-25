@@ -17,6 +17,9 @@ export interface IMenuItem {
   spiceLevel: number;
   allergens: string[];
   tags: string[];
+  hsnCode: string;
+  /** KDS station code (e.g. GRILL, BAR) — empty = all stations */
+  stationCode: string;
   calories?: number;
   repeatRate: number;
   variants: { name: string; priceDelta: number }[];
@@ -42,6 +45,8 @@ const MenuItemSchema = new Schema(
     spiceLevel: { type: Number, default: 0 },
     allergens: { type: [String], default: [] },
     tags: { type: [String], default: [] },
+    hsnCode: { type: String, default: "996331" },
+    stationCode: { type: String, default: "", uppercase: true },
     calories: { type: Number, default: 0 },
     repeatRate: { type: Number, default: 0 },
     variants: {

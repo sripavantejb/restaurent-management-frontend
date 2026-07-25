@@ -4,9 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { apiFetch, useAuth } from "@/components/AuthProvider";
 import { KDS_COLUMN_LABEL, ORDER_TYPE_LABEL, label } from "@/lib/labels";
+import { KdsSkeleton } from "@/components/ui/Skeleton";
 
 interface OrderItem {
   id?: string;
+  menuItemId?: string;
   name: string;
   qty: number;
   notes: string;
@@ -69,15 +71,30 @@ export default function KdsPage() {
   const [syncedAt, setSyncedAt] = useState<Date | null>(null);
   const [tick, setTick] = useState(0);
   const [error, setError] = useState("");
+  const [ready, setReady] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [stations, setStations] = useState<
+    { id: string; name: string; code: string }[]
+  >([]);
+  const [stationFilter, setStationFilter] = useState("");
+  const [newStation, setNewStation] = useState("");
+  const [stationByMenuId, setStationByMenuId] = useState<
+    Record<string, string>
+  >({});
   const mapRef = useRef<Map<string, Order>>(new Map());
 
   const load = useCallback(async () => {
     if (!activeBranchId) return;
     try {
-      const [ord, tbl] = await Promise.all([
+      const [ord, tbl, st, menu] = await Promise.all([
         apiFetch("/api/orders?status=active", { branchId: activeBranchId }),
         apiFetch("/api/tables", { branchId: activeBranchId }),
+        apiFetch("/api/kds/stations", { branchId: activeBranchId }).catch(
+          () => ({ stations: [] })
+        ),
+        apiFetch("/api/menu", { branchId: activeBranchId }).catch(() => ({
+          items: [],
+        })),
       ]);
       const next = new Map<string, Order>();
       for (const o of ord.orders as Order[]) {
@@ -99,10 +116,18 @@ export default function KdsPage() {
       const tmap: Record<string, number> = {};
       for (const t of tbl.tables) tmap[t.id] = t.number;
       setTables(tmap);
+      setStations(st.stations ?? []);
+      const smap: Record<string, string> = {};
+      for (const it of menu.items ?? []) {
+        if (it.stationCode) smap[it.id] = String(it.stationCode).toUpperCase();
+      }
+      setStationByMenuId(smap);
       setSyncedAt(new Date());
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "KDS sync failed");
+    } finally {
+      setReady(true);
     }
   }, [activeBranchId]);
 
@@ -150,11 +175,23 @@ export default function KdsPage() {
 
   void tick;
 
+  const matchStation = (o: Order) => {
+    if (!stationFilter) return true;
+    return o.items.some((it) => {
+      const code = it.menuItemId
+        ? stationByMenuId[it.menuItemId]
+        : undefined;
+      return code === stationFilter;
+    });
+  };
+
+  const filtered = orders.filter(matchStation);
+
   const cols = {
-    NEW: orders.filter((o) => o.status === "PLACED"),
-    COOKING: orders.filter((o) => o.status === "PREPARING"),
-    READY: orders.filter((o) => o.status === "READY"),
-    SERVED: orders.filter(
+    NEW: filtered.filter((o) => o.status === "PLACED"),
+    COOKING: filtered.filter((o) => o.status === "PREPARING"),
+    READY: filtered.filter((o) => o.status === "READY"),
+    SERVED: filtered.filter(
       (o) =>
         o.status === "SERVED" &&
         o.servedAt &&
@@ -162,21 +199,60 @@ export default function KdsPage() {
     ),
   };
 
+  if (!ready) return <KdsSkeleton />;
+
   return (
     <div className="flex h-full flex-col bg-[var(--kds-bg)] text-[#f3efe8]">
-      <header className="flex h-14 items-center justify-between border-b border-[#2a2622] px-4">
-        <div>
+      <header className="flex min-h-14 flex-wrap items-center justify-between gap-2 border-b border-[#2a2622] px-3 py-2 sm:px-4">
+        <div className="min-w-0">
           <p className="text-[11px] tracking-[0.2em] text-[var(--accent)] uppercase">
             Kitchen Display
           </p>
-          <h1 className="text-lg font-semibold">Live tickets</h1>
+          <h1 className="text-base font-semibold sm:text-lg">Live tickets</h1>
         </div>
-        <div className="flex items-center gap-3 text-sm text-[#9a938a]">
+        <div className="flex max-w-full flex-wrap items-center justify-end gap-2 text-sm text-[#9a938a] sm:gap-3">
+          <select
+            className="h-9 max-w-[10rem] rounded border border-[#3a3530] bg-[#1a1714] px-2 text-xs text-[#f3efe8] sm:h-8"
+            value={stationFilter}
+            onChange={(e) => setStationFilter(e.target.value)}
+            aria-label="Station filter"
+          >
+            <option value="">All stations</option>
+            {stations.map((s) => (
+              <option key={s.id} value={s.code}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+          <form
+            className="flex items-center gap-1 sm:flex"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (!newStation.trim()) return;
+              await apiFetch("/api/kds/stations", {
+                method: "POST",
+                branchId: activeBranchId,
+                body: JSON.stringify({
+                  name: newStation.trim(),
+                  code: newStation.trim().slice(0, 4).toUpperCase(),
+                }),
+              });
+              setNewStation("");
+              void load();
+            }}
+          >
+            <input
+              className="h-9 w-24 rounded border border-[#3a3530] bg-[#1a1714] px-2 text-xs sm:h-8 sm:w-28"
+              placeholder="New station"
+              value={newStation}
+              onChange={(e) => setNewStation(e.target.value)}
+            />
+          </form>
           <span className="inline-flex items-center gap-2">
             <span className="h-2.5 w-2.5 rounded-full bg-[var(--success)]" />
             Live
           </span>
-          <span className="num">
+          <span className="num hidden sm:inline">
             Synced{" "}
             {syncedAt
               ? syncedAt.toLocaleTimeString("en-IN", {

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { apiFetch, useAuth } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/Button";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 interface QrCodeRow {
   id: string;
@@ -331,7 +332,14 @@ export default function QrPage() {
         </div>
 
         {loading ? (
-          <p className="text-sm text-[var(--muted)]">Loading codes…</p>
+          <div className="space-y-2" role="status" aria-label="Loading">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div
+                key={i}
+                className="ros-skeleton h-14 w-full rounded-[6px]"
+              />
+            ))}
+          </div>
         ) : filter === "missing" ? (
           missingTables.length === 0 ? (
             <p className="rounded-[6px] border border-dashed border-[var(--border)] p-8 text-center text-sm text-[var(--muted)]">

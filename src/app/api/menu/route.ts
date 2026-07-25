@@ -13,6 +13,9 @@ const CreateItemSchema = z.object({
   isVeg: z.boolean().optional().default(true),
   prepTimeMins: z.number().int().positive().optional().default(15),
   isAvailable: z.boolean().optional().default(true),
+  allergens: z.array(z.string()).optional().default([]),
+  hsnCode: z.string().max(16).optional().default("996331"),
+  stationCode: z.string().max(16).optional().default(""),
   variants: z
     .array(z.object({ name: z.string(), priceDelta: z.number().int() }))
     .optional()
@@ -55,6 +58,10 @@ export const GET = withAuth(async ({ tenant }) => {
       isVeg: i.isVeg,
       prepTimeMins: i.prepTimeMins,
       isAvailable: i.isAvailable,
+      allergens: i.allergens ?? [],
+      hsnCode: i.hsnCode || "996331",
+      stationCode: i.stationCode || "",
+      tags: i.tags ?? [],
       variants: i.variants,
       addons: i.addons,
     })),

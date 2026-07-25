@@ -6,23 +6,21 @@ import {
   PlatformSidebar,
   usePlatformNav,
 } from "@/components/PlatformSidebar";
+import { SessionSkeleton, Skeleton } from "@/components/ui/Skeleton";
 
 function Shell({ children }: { children: React.ReactNode }) {
   const { loading, admin } = usePlatformAuth();
   const { open, setOpen } = usePlatformNav();
 
   if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center px-4 text-[var(--muted)]">
-        Loading platform session…
-      </div>
-    );
+    return <SessionSkeleton />;
   }
 
   if (!admin) {
     return (
-      <div className="flex min-h-screen items-center justify-center px-4 text-[var(--muted)]">
-        Redirecting to admin login…
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[var(--surface)] px-4">
+        <Skeleton className="h-5 w-44" />
+        <Skeleton className="h-3 w-52" />
       </div>
     );
   }

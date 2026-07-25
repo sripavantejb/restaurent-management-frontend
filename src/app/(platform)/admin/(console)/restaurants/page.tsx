@@ -7,12 +7,8 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
-import {
-  RESTAURANT_STATUS_LABEL,
-  PLAN_LABEL,
-  BILLING_STATUS_LABEL,
-  label,
-} from "@/lib/labels";
+import { RESTAURANT_STATUS_LABEL, PLAN_LABEL, BILLING_STATUS_LABEL, label } from "@/lib/labels";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 interface RestaurantRow {
   id: string;
@@ -122,12 +118,23 @@ export default function RestaurantsListPage() {
         </p>
       ) : null}
 
+      {loading ? (
+        <div className="mt-4">
+          <div className="space-y-2 sm:hidden">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} className="h-20 w-full" />
+            ))}
+          </div>
+          <div className="mt-0 hidden space-y-2 sm:block">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <Skeleton key={i} className="h-12 w-full" />
+            ))}
+          </div>
+        </div>
+      ) : (
+        <>
       <div className="mt-4 space-y-2 sm:hidden">
-        {loading ? (
-          <p className="rounded-[6px] border border-[var(--border)] bg-white px-4 py-8 text-center text-[var(--muted)]">
-            Loading…
-          </p>
-        ) : rows.length === 0 ? (
+        {rows.length === 0 ? (
           <p className="rounded-[6px] border border-[var(--border)] bg-white px-4 py-8 text-center text-[var(--muted)]">
             No restaurants match this filter.
           </p>
@@ -176,13 +183,7 @@ export default function RestaurantsListPage() {
             </tr>
           </thead>
           <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-[var(--muted)]">
-                  Loading…
-                </td>
-              </tr>
-            ) : rows.length === 0 ? (
+            {rows.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-4 py-8 text-center text-[var(--muted)]">
                   No restaurants match this filter.
@@ -235,6 +236,8 @@ export default function RestaurantsListPage() {
           </tbody>
         </table>
       </Card>
+        </>
+      )}
     </div>
   );
 }

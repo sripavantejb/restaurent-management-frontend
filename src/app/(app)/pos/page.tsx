@@ -16,6 +16,7 @@ import {
 } from "@/lib/labels";
 import { calcTax, calcTotal, formatMoney } from "@/lib/money";
 import { printInvoiceText } from "@/lib/print-invoice";
+import { SplitPaneSkeleton } from "@/components/ui/Skeleton";
 
 interface Category {
   id: string;
@@ -50,14 +51,22 @@ export default function PosPage() {
   const [q, setQ] = useState("");
   const [toast, setToast] = useState("");
   const [error, setError] = useState("");
+  const [ready, setReady] = useState(false);
   const [tableOpen, setTableOpen] = useState(false);
   const [payOpen, setPayOpen] = useState(false);
   const [configItem, setConfigItem] = useState<MenuItem | null>(null);
   const [cfgVariant, setCfgVariant] = useState("");
   const [cfgAddons, setCfgAddons] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  const [payMethod, setPayMethod] = useState<"CASH" | "CARD" | "UPI">("UPI");
+  const [payMethod, setPayMethod] = useState<"CASH" | "CARD" | "UPI" | "WALLET">(
+    "UPI"
+  );
   const [tendered, setTendered] = useState("");
+  const [payAmountInr, setPayAmountInr] = useState("");
+  const [couponCode, setCouponCode] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [customerId, setCustomerId] = useState<string | null>(null);
+  const [remainingDue, setRemainingDue] = useState<number | null>(null);
   const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
   /** Mobile-only: Menu vs Bill pane (desktop always shows both). */
   const [mobilePane, setMobilePane] = useState<"menu" | "bill">("menu");
@@ -95,6 +104,8 @@ export default function PosPage() {
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load menu");
+    } finally {
+      setReady(true);
     }
   }, [activeBranchId]);
 
@@ -220,6 +231,9 @@ export default function PosPage() {
       setTableOpen(true);
       return;
     }
+    setRemainingDue(null);
+    setPayAmountInr("");
+    setCouponCode("");
     if (!pendingOrderId) {
       setBusy(true);
       try {
@@ -254,21 +268,88 @@ export default function PosPage() {
     }
   }
 
+  async function applyCoupon() {
+    if (!couponCode.trim() || !activeBranchId) return;
+    try {
+      const res = await apiFetch("/api/coupons/validate", {
+        method: "POST",
+        branchId: activeBranchId,
+        body: JSON.stringify({
+          code: couponCode.trim(),
+          subtotalPaise: subtotal,
+        }),
+      });
+      cart.setDiscount("flat", res.discountPaise);
+      setToast(`Coupon ${res.code} · −${formatMoney(res.discountPaise)}`);
+      setTimeout(() => setToast(""), 2500);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Coupon failed");
+    }
+  }
+
+  async function lookupCustomer() {
+    if (!customerPhone.trim() || !activeBranchId) return;
+    try {
+      const data = await apiFetch(
+        `/api/crm/customers?q=${encodeURIComponent(customerPhone.trim())}`,
+        { branchId: activeBranchId }
+      );
+      const hit = (data.customers ?? [])[0];
+      if (!hit) {
+        const created = await apiFetch("/api/crm/customers", {
+          method: "POST",
+          branchId: activeBranchId,
+          body: JSON.stringify({ phone: customerPhone.trim(), name: "Guest" }),
+        });
+        setCustomerId(created.id ?? null);
+        setToast("Customer created");
+      } else {
+        setCustomerId(hit.id);
+        setToast(
+          `${hit.name || hit.phone} · ${hit.loyaltyPoints ?? 0} pts · wallet ₹${((hit.walletPaise ?? 0) / 100).toFixed(0)}`
+        );
+      }
+      setTimeout(() => setToast(""), 3000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Customer lookup failed");
+    }
+  }
+
   async function confirmPay() {
     if (!pendingOrderId) return;
     setBusy(true);
     try {
+      const due = remainingDue != null ? remainingDue : total;
+      const installment =
+        payAmountInr.trim() !== ""
+          ? Math.round(Number(payAmountInr) * 100)
+          : due;
       const tenderedPaise =
-        payMethod === "CASH" ? Math.round(Number(tendered)) : total;
-      await apiFetch("/api/payments", {
+        payMethod === "CASH"
+          ? Math.round(Number(tendered) || installment)
+          : installment;
+      const res = await apiFetch("/api/payments", {
         method: "POST",
         branchId: activeBranchId,
         body: JSON.stringify({
           orderId: pendingOrderId,
           method: payMethod,
+          amount: installment,
           tenderedAmount: tenderedPaise,
+          customerId: customerId || undefined,
+          couponCode: couponCode.trim() || undefined,
         }),
       });
+      if (res.fullyPaid === false && res.remainingDue > 0) {
+        setRemainingDue(res.remainingDue);
+        setPayAmountInr("");
+        setTendered("");
+        setToast(
+          `Partial ₹${(res.amount / 100).toFixed(0)} · due ₹${(res.remainingDue / 100).toFixed(0)}`
+        );
+        setTimeout(() => setToast(""), 3500);
+        return;
+      }
       try {
         const inv = await apiFetch(`/api/orders/${pendingOrderId}/invoice`, {
           branchId: activeBranchId,
@@ -281,6 +362,10 @@ export default function PosPage() {
       setTimeout(() => setToast(""), 3500);
       setPayOpen(false);
       setPendingOrderId(null);
+      setRemainingDue(null);
+      setCouponCode("");
+      setCustomerId(null);
+      setCustomerPhone("");
       cart.clear();
       void load();
     } catch (e) {
@@ -396,6 +481,8 @@ export default function PosPage() {
     BLOCKED: "bg-red-500",
     OUT_OF_SERVICE: "bg-neutral-400",
   };
+
+  if (!ready) return <SplitPaneSkeleton />;
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -807,14 +894,21 @@ export default function PosPage() {
 
       <Modal open={payOpen} onClose={() => setPayOpen(false)} title="Collect payment">
         <div className="space-y-4">
-          <p className="num text-3xl font-semibold">{formatMoney(total)}</p>
-          <div className="flex gap-2">
-            {(["CASH", "CARD", "UPI"] as const).map((m) => (
+          <p className="num text-3xl font-semibold">
+            {formatMoney(remainingDue != null ? remainingDue : total)}
+          </p>
+          {remainingDue != null && remainingDue < total ? (
+            <p className="text-xs text-[var(--muted)]">
+              Partial payments in progress · original {formatMoney(total)}
+            </p>
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            {(["CASH", "CARD", "UPI", "WALLET"] as const).map((m) => (
               <button
                 key={m}
                 type="button"
                 onClick={() => setPayMethod(m)}
-                className={`h-11 flex-1 rounded-[6px] border text-sm font-medium ${
+                className={`h-11 min-w-[4.5rem] flex-1 rounded-[6px] border text-sm font-medium ${
                   payMethod === m
                     ? "border-[var(--accent)] bg-[var(--accent)] text-white"
                     : "border-[var(--border)]"
@@ -824,6 +918,51 @@ export default function PosPage() {
               </button>
             ))}
           </div>
+          <label className="block text-xs text-[var(--muted)]">
+            Customer phone (loyalty / wallet)
+            <div className="mt-1 flex gap-2">
+              <Input
+                value={customerPhone}
+                onChange={(e) => setCustomerPhone(e.target.value)}
+                placeholder="9xxxxxxxxx"
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => void lookupCustomer()}
+              >
+                Link
+              </Button>
+            </div>
+          </label>
+          <label className="block text-xs text-[var(--muted)]">
+            Coupon code
+            <div className="mt-1 flex gap-2">
+              <Input
+                value={couponCode}
+                onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                placeholder="SAVE10"
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => void applyCoupon()}
+              >
+                Apply
+              </Button>
+            </div>
+          </label>
+          <label className="block text-xs text-[var(--muted)]">
+            Pay amount (₹) — leave blank for full due
+            <Input
+              className="mt-1"
+              type="number"
+              step="0.01"
+              value={payAmountInr}
+              onChange={(e) => setPayAmountInr(e.target.value)}
+              placeholder={((remainingDue ?? total) / 100).toFixed(2)}
+            />
+          </label>
           {payMethod === "CASH" ? (
             <label className="block text-xs text-[var(--muted)]">
               Tendered (paise)
@@ -833,15 +972,39 @@ export default function PosPage() {
                 value={tendered}
                 onChange={(e) => setTendered(e.target.value)}
               />
-              <span className="mt-1 block num">
-                Change:{" "}
-                {formatMoney(Math.max(0, (Number(tendered) || 0) - total))}
-              </span>
             </label>
           ) : null}
           <Button className="w-full" size="lg" disabled={busy} onClick={() => void confirmPay()}>
             Confirm payment
           </Button>
+          {pendingOrderId ? (
+            <Button
+              className="w-full"
+              variant="secondary"
+              disabled={busy}
+              onClick={async () => {
+                try {
+                  const send = await apiFetch(
+                    `/api/orders/${pendingOrderId}/invoice/send`,
+                    {
+                      method: "POST",
+                      branchId: activeBranchId,
+                      body: JSON.stringify({ channel: "EMAIL" }),
+                    }
+                  );
+                  if (send.links?.mailto) window.open(send.links.mailto, "_blank");
+                  else if (send.links?.whatsapp)
+                    window.open(send.links.whatsapp, "_blank");
+                } catch (e) {
+                  setError(
+                    e instanceof Error ? e.message : "Could not prepare invoice send"
+                  );
+                }
+              }}
+            >
+              Send invoice (email / WhatsApp)
+            </Button>
+          ) : null}
         </div>
       </Modal>
 

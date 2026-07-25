@@ -5,17 +5,18 @@ import type { AiTenantCtx, StreamEvent, ToolResult } from "../types";
 import { filterToolsForUser } from "../registry/tools";
 import { executeTool } from "./executor";
 import { detectIntentTools } from "./intent";
-import {
-  hasOpenAiKey,
-  runOpenAiWithTools,
-  streamOpenAiFinal,
-  type ChatMsg,
-} from "./openai";
+import { hasOpenAiChatKey } from "./llm-config";
+import { polishToolAnswer } from "./openai";
 
 function sse(event: StreamEvent): string {
   return `data: ${JSON.stringify(event)}\n\n`;
 }
 
+/**
+ * Copilot chat:
+ * 1) Always query live Mongo via intent tools
+ * 2) Optionally polish with OpenAI (numbers stay from tools)
+ */
 export async function handleCopilotChat(input: {
   ctx: AiTenantCtx;
   message: string;
@@ -54,14 +55,6 @@ export async function handleCopilotChat(input: {
     content: message,
   });
 
-  const history = await AiMessage.find({
-    conversationId: conversation._id,
-    restaurantId: ctx.restaurantId,
-  })
-    .sort({ createdAt: 1 })
-    .limit(40)
-    .lean();
-
   const allowed = filterToolsForUser(ctx.permissions);
   const collectedBlocks: ToolResult["blocks"] = [];
   const toolSummaries: string[] = [];
@@ -82,92 +75,57 @@ export async function handleCopilotChat(input: {
         emit(sse({ type: "block", block: b }));
       }
     }
-    toolSummaries.push(`${name}: ${result.summary}`);
+    toolSummaries.push(result.summary);
     return {
       summary: result.summary,
       payload: { data: result.data, blocks: result.blocks },
     };
   };
 
-  let assistantText = "";
+  const names = detectIntentTools(message).filter((n) =>
+    allowed.some((t) => t.name === n)
+  );
 
-  if (hasOpenAiKey()) {
-    const chatMsgs: ChatMsg[] = history
-      .filter((m) => m.role === "user" || m.role === "assistant")
-      .map((m) => ({
-        role: m.role as "user" | "assistant",
-        content: m.content,
-      }));
-
-    try {
-      const { text, toolNames } = await runOpenAiWithTools({
-        messages: chatMsgs,
-        tools: allowed,
-        execute: runOne,
-      });
-
-      // Stream a polished pass if tools ran
-      if (toolNames.length) {
-        const polishMsgs: ChatMsg[] = [
-          ...chatMsgs,
-          {
-            role: "user",
-            content: `Tool results:\n${toolSummaries.join("\n")}\n\nWrite the final answer for the user now.`,
-          },
-        ];
-        assistantText = await streamOpenAiFinal({
-          messages: polishMsgs,
-          onDelta: (d) => emit(sse({ type: "delta", content: d })),
-        });
-      } else {
-        assistantText = text;
-        // faux stream
-        for (const part of chunkText(text, 24)) {
-          emit(sse({ type: "delta", content: part }));
-        }
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "AI error";
-      emit(sse({ type: "error", error: msg }));
-      // fallback to intent
-      assistantText = await runFallback();
-    }
-  } else {
-    assistantText = await runFallback();
+  for (const name of names) {
+    const args =
+      name === "searchKnowledge" ? { query: message, topK: 6 } : {};
+    await runOne(name, args);
   }
 
-  async function runFallback() {
-    const names = detectIntentTools(message).filter((n) =>
-      allowed.some((t) => t.name === n)
-    );
-    for (const name of names) {
-      const args =
-        name === "searchKnowledge" ? { query: message, topK: 6 } : {};
-      await runOne(name, args);
-    }
-    const text = [
-      "### Summary",
-      toolSummaries.join("\n\n") || "No tools matched your permissions.",
-      "",
-      "### Notes",
-      process.env.NVIDIA_API_KEY ||
-      process.env.NGC_API_KEY ||
-      process.env.OPENAI_API_KEY
-        ? ""
-        : "_Running in local tool mode (set NVIDIA_API_KEY or OPENAI_API_KEY for full LLM reasoning)._",
-      "",
-      "### Suggested follow-ups",
-      "- What are today's sales?",
-      "- Show low stock items",
-      "- Forecast tomorrow's sales",
-    ]
-      .filter(Boolean)
-      .join("\n");
+  const rawText =
+    toolSummaries.length > 0
+      ? toolSummaries.join("\n\n")
+      : "I couldn't match that to live restaurant data. Try asking about sales, tables, kitchen, or stock.";
 
-    for (const part of chunkText(text, 32)) {
+  let assistantText = rawText;
+
+  if (hasOpenAiChatKey() && toolSummaries.length > 0) {
+    try {
+      const polished = await polishToolAnswer({
+        question: message,
+        toolSummaries,
+        onDelta: (d) => emit(sse({ type: "delta", content: d })),
+      });
+      if (polished.trim()) {
+        assistantText = polished.trim();
+      } else {
+        for (const part of chunkText(rawText, 48)) {
+          emit(sse({ type: "delta", content: part }));
+        }
+        assistantText = rawText;
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "OpenAI polish failed";
+      emit(sse({ type: "error", error: msg }));
+      for (const part of chunkText(rawText, 48)) {
+        emit(sse({ type: "delta", content: part }));
+      }
+      assistantText = rawText;
+    }
+  } else {
+    for (const part of chunkText(rawText, 48)) {
       emit(sse({ type: "delta", content: part }));
     }
-    return text;
   }
 
   const saved = await AiMessage.create({

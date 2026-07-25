@@ -1,19 +1,31 @@
 /**
- * Deterministic intent router when OPENAI_API_KEY is missing.
- * Maps natural language → tool names (no LLM, no Mongo from this layer).
+ * Deterministic intent router — maps natural language → live Mongo tools.
+ * No LLM. Used for all Copilot chat answers.
  */
 export function detectIntentTools(message: string): string[] {
-  const q = message.toLowerCase();
+  const q = message.toLowerCase().trim();
   const tools: string[] = [];
 
   const push = (name: string) => {
     if (!tools.includes(name)) tools.push(name);
   };
 
-  if (/insight|overview|how.*(business|doing)|snapshot/.test(q)) {
+  // Greetings / tiny messages → branch snapshot
+  if (/^(hi|hello|hey|yo|sup|good\s*(morning|afternoon|evening))\b/.test(q)) {
+    push("getAiInsights");
+    push("getTodaySales");
+    push("getTableStatus");
+    return tools;
+  }
+
+  if (/insight|overview|how.*(business|doing)|snapshot|status\??$/.test(q)) {
     push("getAiInsights");
   }
-  if (/today.*sales|sales.*today|revenue.*today|how much.*(sold|made)/.test(q)) {
+  if (
+    /today.*sales|sales.*today|revenue.*today|how much.*(sold|made)|today'?s?\s*sales/.test(
+      q
+    )
+  ) {
     push("getTodaySales");
   }
   if (/yesterday/.test(q) && /sales|revenue/.test(q)) push("getYesterdaySales");
@@ -28,7 +40,7 @@ export function detectIntentTools(message: string): string[] {
   if (/gst|cgst|sgst|tax/.test(q)) push("getGSTCollected");
   if (/cash.?flow|upi|payment.?mix/.test(q)) push("getCashFlow");
 
-  if (/pending.?order|kitchen.?queue|in.?kitchen/.test(q)) {
+  if (/pending.?order|kitchen.?queue|in.?kitchen|kds/.test(q)) {
     push("getKitchenQueue");
     push("getPendingOrders");
   }
@@ -37,15 +49,24 @@ export function detectIntentTools(message: string): string[] {
   if (/cancel/.test(q) && /order/.test(q)) push("getCancelledOrders");
   if (/order/.test(q) && /today/.test(q)) push("getOrdersToday");
 
-  if (/occup|table.?status|floor/.test(q)) push("getTableStatus");
-  if (/occupied/.test(q)) push("getOccupiedTables");
-  if (/available.?table|free.?table/.test(q)) push("getAvailableTables");
-  if (/cleaning/.test(q)) push("getCleaningTables");
+  // Floor / tables — prefer specific occupied list when asked
+  if (/occupied|which\s+tables?\s+are|tables?\s+(are\s+)?busy|who\s+is\s+seated/.test(q)) {
+    push("getOccupiedTables");
+    push("getTableStatus");
+  } else if (/occup|table.?status|floor|tables?\s+right\s+now|live\s+floor/.test(q)) {
+    push("getTableStatus");
+  }
+  if (/available.?table|free.?table|empty.?table/.test(q)) {
+    push("getAvailableTables");
+  }
+  if (/cleaning/.test(q) && /table/.test(q)) push("getCleaningTables");
   if (/reserved.?table/.test(q)) push("getReservedTables");
 
-  if (/low.?stock|reorder/.test(q)) push("getLowStockItems");
+  if (/low.?stock|reorder|out\s+of\s+stock/.test(q)) push("getLowStockItems");
   if (/inventory.?value|stock.?value/.test(q)) push("getInventoryValue");
-  if (/current.?stock|inventory(?!.*value)/.test(q)) push("getCurrentStock");
+  if (/current.?stock|\bstock\b|inventory(?!.*value)/.test(q)) {
+    push("getCurrentStock");
+  }
   if (/consump/.test(q)) push("getIngredientConsumption");
 
   if (/forecast|predict|tomorrow/.test(q)) push("forecastTomorrowSales");
@@ -58,7 +79,7 @@ export function detectIntentTools(message: string): string[] {
   if (/inventory.?report/.test(q)) push("generateInventoryReport");
 
   if (
-    /allergen|sop|policy|policies|recipe|prep|how do we|knowledge|fssai|business hours|wifi|menu item.*contain/.test(
+    /allergen|sop|policy|policies|recipe|how do we|knowledge|fssai|business hours|wifi|menu item.*contain/.test(
       q
     )
   ) {
@@ -74,6 +95,7 @@ export function detectIntentTools(message: string): string[] {
   if (tools.length === 0) {
     push("getAiInsights");
     push("getTodaySales");
+    push("getTableStatus");
   }
 
   return tools.slice(0, 4);

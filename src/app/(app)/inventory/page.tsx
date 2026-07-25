@@ -9,6 +9,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/Badge";
 import { formatMoney } from "@/lib/money";
 import { InventoryOpsPanel } from "@/components/inventory/InventoryOpsPanel";
+import { TablePageSkeleton } from "@/components/ui/Skeleton";
 
 type Tab =
   | "overview"
@@ -57,6 +58,7 @@ export default function InventoryPage() {
 
   const [tab, setTab] = useState<Tab>("overview");
   const [error, setError] = useState("");
+  const [ready, setReady] = useState(false);
   const [toast, setToast] = useState("");
 
   const [items, setItems] = useState<StockItem[]>([]);
@@ -229,19 +231,23 @@ export default function InventoryPage() {
 
   const loadCore = useCallback(async () => {
     if (!activeBranchId) return;
-    const q = lowOnly ? "?lowStock=1" : "";
-    const [stock, analyticsData, rec] = await Promise.all([
-      apiFetch(`/api/inventory${q}`, { branchId: activeBranchId }),
-      apiFetch("/api/inventory/analytics", { branchId: activeBranchId }),
-      apiFetch("/api/inventory/recipes", { branchId: activeBranchId }),
-    ]);
-    setItems(stock.items);
-    setLowStockCount(stock.lowStockCount);
-    setInventoryValue(stock.inventoryValuePaise ?? 0);
-    setAnalytics(analyticsData);
-    setRecipes(rec.recipes);
-    setMenuItems(rec.menuItems);
-    setInvOptions(rec.inventoryItems);
+    try {
+      const q = lowOnly ? "?lowStock=1" : "";
+      const [stock, analyticsData, rec] = await Promise.all([
+        apiFetch(`/api/inventory${q}`, { branchId: activeBranchId }),
+        apiFetch("/api/inventory/analytics", { branchId: activeBranchId }),
+        apiFetch("/api/inventory/recipes", { branchId: activeBranchId }),
+      ]);
+      setItems(stock.items);
+      setLowStockCount(stock.lowStockCount);
+      setInventoryValue(stock.inventoryValuePaise ?? 0);
+      setAnalytics(analyticsData);
+      setRecipes(rec.recipes);
+      setMenuItems(rec.menuItems);
+      setInvOptions(rec.inventoryItems);
+    } finally {
+      setReady(true);
+    }
   }, [activeBranchId, lowOnly]);
 
   const loadTabData = useCallback(async () => {
@@ -356,6 +362,8 @@ export default function InventoryPage() {
     { id: "reports", label: "Reports" },
     { id: "labels", label: "Labels" },
   ];
+
+  if (!ready) return <TablePageSkeleton />;
 
   return (
     <div className="p-4 sm:p-6">
@@ -561,6 +569,7 @@ export default function InventoryPage() {
             Low stock only ({lowStockCount})
           </label>
           <div className="overflow-auto rounded-[6px] border border-[var(--border)]">
+            <div className="table-scroll">
             <table className="w-full text-left text-sm">
               <thead className="bg-[var(--surface-2)] text-xs text-[var(--muted)]">
                 <tr>
@@ -612,12 +621,14 @@ export default function InventoryPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         </div>
       ) : null}
 
       {tab === "ledger" ? (
         <div className="mt-4 overflow-auto rounded-[6px] border border-[var(--border)]">
+          <div className="table-scroll">
           <table className="w-full text-left text-sm">
             <thead className="bg-[var(--surface-2)] text-xs text-[var(--muted)]">
               <tr>
@@ -655,6 +666,7 @@ export default function InventoryPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       ) : null}
 

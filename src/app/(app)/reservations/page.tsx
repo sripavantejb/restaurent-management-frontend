@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { apiFetch, useAuth } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { TablePageSkeleton } from "@/components/ui/Skeleton";
 
 export default function ReservationsPage() {
   const { activeBranchId, hasPermission } = useAuth();
@@ -27,18 +28,25 @@ export default function ReservationsPage() {
     notes: "",
     status: "BOOKED",
   });
+  const [ready, setReady] = useState(false);
 
   const load = useCallback(async () => {
     if (!activeBranchId) return;
-    const data = await apiFetch("/api/reservations", {
-      branchId: activeBranchId,
-    });
-    setRows(data.reservations);
+    try {
+      const data = await apiFetch("/api/reservations", {
+        branchId: activeBranchId,
+      });
+      setRows(data.reservations);
+    } finally {
+      setReady(true);
+    }
   }, [activeBranchId]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  if (!ready) return <TablePageSkeleton />;
 
   return (
     <div className="space-y-4 p-4 sm:p-6">

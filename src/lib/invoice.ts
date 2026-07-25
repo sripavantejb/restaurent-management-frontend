@@ -70,8 +70,9 @@ export function invoiceToPrintText(inv: InvoiceDocument): string {
   if (inv.customerName) lines.push(`Guest: ${inv.customerName}`);
   lines.push("--------------------------------");
   for (const l of inv.lines) {
+    const hsn = l.hsnCode ? ` [HSN ${l.hsnCode}]` : "";
     lines.push(
-      `${l.qty}x ${l.name}`.padEnd(24) + formatMoney(l.amount).padStart(12)
+      `${l.qty}x ${l.name}${hsn}`.padEnd(28) + formatMoney(l.amount).padStart(12)
     );
   }
   lines.push("--------------------------------");

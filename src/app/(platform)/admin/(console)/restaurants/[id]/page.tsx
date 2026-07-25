@@ -13,6 +13,7 @@ import {
   BILLING_STATUS_LABEL,
   label,
 } from "@/lib/labels";
+import { DetailPageSkeleton } from "@/components/ui/Skeleton";
 
 interface Detail {
   restaurant: {
@@ -176,7 +177,7 @@ export default function RestaurantDetailPage() {
   }
 
   if (!data) {
-    return <div className="p-6 text-[var(--muted)]">Loading restaurant…</div>;
+    return <DetailPageSkeleton />;
   }
 
   const { restaurant, branches, owners, staffCount, usage } = data;

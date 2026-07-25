@@ -5,6 +5,7 @@ import { apiFetch, useAuth } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { formatMoney } from "@/lib/money";
+import { ConsolePageSkeleton } from "@/components/ui/Skeleton";
 
 export default function FinancePage() {
   const { activeBranchId, hasPermission } = useAuth();
@@ -32,18 +33,23 @@ export default function FinancePage() {
     amount: "",
     vendor: "",
   });
+  const [ready, setReady] = useState(false);
 
   const load = useCallback(async () => {
     if (!activeBranchId) return;
-    const [list, report] = await Promise.all([
-      apiFetch("/api/finance/expenses", { branchId: activeBranchId }),
-      apiFetch("/api/finance/expenses?report=pnl", {
-        branchId: activeBranchId,
-      }),
-    ]);
-    setExpenses(list.expenses);
-    setTodayTotal(list.todayTotalPaise);
-    setPnl(report.pnl);
+    try {
+      const [list, report] = await Promise.all([
+        apiFetch("/api/finance/expenses", { branchId: activeBranchId }),
+        apiFetch("/api/finance/expenses?report=pnl", {
+          branchId: activeBranchId,
+        }),
+      ]);
+      setExpenses(list.expenses);
+      setTodayTotal(list.todayTotalPaise);
+      setPnl(report.pnl);
+    } finally {
+      setReady(true);
+    }
   }, [activeBranchId]);
 
   useEffect(() => {
@@ -54,10 +60,12 @@ export default function FinancePage() {
     return <div className="p-6 text-sm text-[var(--muted)]">No access</div>;
   }
 
+  if (!ready) return <ConsolePageSkeleton />;
+
   return (
     <div className="space-y-4 p-4 sm:p-6">
       <h1 className="text-2xl font-semibold tracking-tight">Finance</h1>
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
         {[
           ["Revenue (MTD)", pnl?.revenuePaise],
           ["Expenses (MTD)", pnl?.expensesPaise],

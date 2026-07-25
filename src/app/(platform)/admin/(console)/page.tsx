@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { RESTAURANT_STATUS_LABEL, label } from "@/lib/labels";
+import { ConsolePageSkeleton } from "@/components/ui/Skeleton";
 
 interface Counts {
   total: number;
@@ -65,7 +66,7 @@ export default function PlatformOverviewPage() {
   }
 
   if (!counts) {
-    return <div className="p-6 text-[var(--muted)]">Loading platform overview…</div>;
+    return <ConsolePageSkeleton />;
   }
 
   const tiles = [

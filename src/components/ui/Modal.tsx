@@ -21,15 +21,20 @@ export function Modal({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
   }, [open, onClose]);
 
   if (!open) return null;
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4"
       onClick={onClose}
       role="presentation"
     >
@@ -37,9 +42,12 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`max-h-[90vh] w-full overflow-auto rounded-[6px] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-none ${wide ? "max-w-3xl" : "max-w-lg"}`}
+        className={`max-h-[min(92dvh,100%)] w-full overflow-auto rounded-t-[14px] border border-[var(--border)] bg-[var(--surface)] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-none sm:rounded-[6px] sm:pb-4 ${
+          wide ? "sm:max-w-3xl" : "sm:max-w-lg"
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
+        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-[var(--border)] sm:hidden" />
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-lg font-semibold text-[var(--ink)]">{title}</h2>
           <button

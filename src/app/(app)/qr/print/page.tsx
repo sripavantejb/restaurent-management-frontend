@@ -5,6 +5,7 @@ import Link from "next/link";
 import QRCode from "qrcode";
 import { apiFetch, useAuth } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/Button";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 interface QrCodeRow {
   id: string;
@@ -109,7 +110,11 @@ export default function QrPrintPage() {
 
       <div className="flex-1 overflow-auto p-4 print:p-0">
         {loading ? (
-          <p className="text-sm text-[var(--muted)]">Preparing print sheet…</p>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" role="status" aria-label="Loading">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="h-48 w-full" />
+            ))}
+          </div>
         ) : codes.length === 0 ? (
           <p className="text-sm text-[var(--muted)]">
             No active codes.{" "}

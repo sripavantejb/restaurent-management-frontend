@@ -21,6 +21,7 @@ import {
   tableDisplayStatus,
 } from "@/lib/labels";
 import { formatMoney } from "@/lib/money";
+import { SplitPaneSkeleton } from "@/components/ui/Skeleton";
 
 interface TableRow {
   id: string;
@@ -32,6 +33,8 @@ interface TableRow {
   status: string;
   isVip?: boolean;
   isOutdoor?: boolean;
+  floorId?: string | null;
+  sectionId?: string | null;
   mergeGroupId?: string | null;
   currentSessionId?: string | null;
   currentSession: {
@@ -93,7 +96,10 @@ export default function TablesPage() {
   const [tables, setTables] = useState<TableRow[]>([]);
   const [selected, setSelected] = useState<TableRow | null>(null);
   const [error, setError] = useState("");
+  const [ready, setReady] = useState(false);
   const [toast, setToast] = useState("");
+  const [floors, setFloors] = useState<{ id: string; name: string }[]>([]);
+  const [floorFilter, setFloorFilter] = useState("");
   const [editMode, setEditMode] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -128,8 +134,14 @@ export default function TablesPage() {
       if (!activeBranchId) return;
       if (!force && dirty && editMode) return;
       try {
-        const data = await apiFetch("/api/tables", { branchId: activeBranchId });
+        const [data, fl] = await Promise.all([
+          apiFetch("/api/tables", { branchId: activeBranchId }),
+          apiFetch("/api/floors", { branchId: activeBranchId }).catch(() => ({
+            floors: [],
+          })),
+        ]);
         setTables(data.tables);
+        setFloors(fl.floors ?? []);
         setSelected((prev) => {
           if (!prev) return prev;
           const next = (data.tables as TableRow[]).find((t) => t.id === prev.id);
@@ -138,6 +150,8 @@ export default function TablesPage() {
         setError("");
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load tables");
+      } finally {
+        setReady(true);
       }
     },
     [activeBranchId, dirty, editMode]
@@ -406,6 +420,64 @@ export default function TablesPage() {
     }
   }
 
+  async function printQrPack() {
+    const withQr = (floorFilter ? visibleTables : tables).filter(
+      (t) => t.qrCode?.shortUrl
+    );
+    if (withQr.length === 0) {
+      showToast("No QR codes to print — generate first");
+      return;
+    }
+    setBusy(true);
+    try {
+      const QRCode = (await import("qrcode")).default;
+      const cards = await Promise.all(
+        withQr.map(async (t) => {
+          const svg = await QRCode.toString(t.qrCode!.shortUrl, {
+            type: "svg",
+            errorCorrectionLevel: "H",
+            margin: 2,
+            width: 220,
+            color: { dark: "#12100E", light: "#FFFFFF" },
+          });
+          return { number: t.number, svg, url: t.qrCode!.shortUrl };
+        })
+      );
+      const w = window.open("", "_blank", "noopener,noreferrer,width=900,height=700");
+      if (!w) {
+        showToast("Allow popups to print QR pack");
+        return;
+      }
+      w.document.write(`<!doctype html><html><head><title>QR pack</title>
+<style>
+  body{font-family:Georgia,serif;padding:16px;color:#12100e;background:#fff}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:20px}
+  .card{border:1px solid #ddd;padding:12px;text-align:center;page-break-inside:avoid}
+  .card svg{width:160px;height:160px}
+  h2{margin:0 0 6px;font-size:18px}
+  p{margin:0;font-size:10px;word-break:break-all;color:#666}
+  @media print{body{padding:0}.card{border-color:#bbb}}
+</style></head><body>
+<h1 style="font-size:20px;margin:0 0 16px">Table QR pack · ${cards.length} codes</h1>
+<div class="grid">
+${cards
+  .map(
+    (c) =>
+      `<div class="card"><h2>Table ${c.number}</h2>${c.svg}<p>${c.url}</p></div>`
+  )
+  .join("")}
+</div>
+<script>setTimeout(function(){window.print()},400)</script>
+</body></html>`);
+      w.document.close();
+      showToast(`Print pack · ${cards.length} tables`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "QR pack failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function saveLayout() {
     setBusy(true);
     try {
@@ -551,7 +623,12 @@ export default function TablesPage() {
 
   const maxX = Math.max(...tables.map((t) => t.x), 400) + 140;
   const maxY = Math.max(...tables.map((t) => t.y), 300) + 120;
-  const listSorted = [...tables].sort((a, b) => a.number - b.number);
+  const visibleTables = floorFilter
+    ? tables.filter((t) => t.floorId === floorFilter)
+    : tables;
+  const listSorted = [...visibleTables].sort((a, b) => a.number - b.number);
+
+  if (!ready) return <SplitPaneSkeleton />;
 
   return (
     <div className="p-4 sm:p-6">
@@ -565,19 +642,59 @@ export default function TablesPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <select
+            className="h-10 rounded-[6px] border border-[var(--border)] bg-white px-3 text-sm"
+            value={floorFilter}
+            onChange={(e) => setFloorFilter(e.target.value)}
+            aria-label="Floor filter"
+          >
+            <option value="">All floors</option>
+            {floors.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.name}
+              </option>
+            ))}
+          </select>
+          {canEdit ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={async () => {
+                const name = window.prompt("Floor name", "Ground");
+                if (!name?.trim()) return;
+                await apiFetch("/api/floors", {
+                  method: "POST",
+                  branchId: activeBranchId,
+                  body: JSON.stringify({ name: name.trim() }),
+                });
+                void load(true);
+              }}
+            >
+              Add floor
+            </Button>
+          ) : null}
           {toast ? (
             <span className="rounded-[6px] bg-[var(--success)]/15 px-3 py-1 text-sm text-[var(--success)]">
               {toast}
             </span>
           ) : null}
           {canManageQr ? (
-            <Button
-              variant="secondary"
-              disabled={busy || tables.every((t) => t.qrCode)}
-              onClick={() => void generateMissingQrs()}
-            >
-              Generate missing QRs
-            </Button>
+            <>
+              <Button
+                variant="secondary"
+                disabled={busy || tables.every((t) => t.qrCode)}
+                onClick={() => void generateMissingQrs()}
+              >
+                Generate missing QRs
+              </Button>
+              <Button
+                variant="secondary"
+                disabled={busy || tables.every((t) => !t.qrCode)}
+                onClick={() => void printQrPack()}
+              >
+                Print QR pack
+              </Button>
+            </>
           ) : null}
           {canEdit ? (
             <>
@@ -688,7 +805,7 @@ export default function TablesPage() {
               className="relative"
               style={{ width: maxX, height: maxY, minHeight: 320 }}
             >
-              {tables.map((t) => (
+              {visibleTables.map((t) => (
                 <button
                   key={t.id}
                   type="button"

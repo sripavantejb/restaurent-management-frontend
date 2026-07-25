@@ -4,8 +4,12 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { PlatformAuthProvider, usePlatformAuth } from "@/components/PlatformAuthProvider";
+import {
+  PlatformAuthProvider,
+  usePlatformAuth,
+} from "@/components/PlatformAuthProvider";
 import { apiUrl } from "@/lib/api-url";
+import styles from "@/app/(auth)/login/login.module.css";
 
 function LoginForm() {
   const router = useRouter();
@@ -29,7 +33,9 @@ function LoginForm() {
       const data = await res.json();
       if (!res.ok) {
         setError(
-          `${data.error || "Login failed"}. ${data.hint || "Try admin@restaurantos.com / demo1234."}`
+          `${data.error || "Login failed"}. ${
+            data.hint || "Try admin@restaurantos.com / demo1234."
+          }`
         );
         setLoading(false);
         return;
@@ -45,67 +51,91 @@ function LoginForm() {
   }
 
   return (
-    <div
-      className="flex min-h-screen items-center justify-center px-4"
-      style={{
-        background:
-          "radial-gradient(ellipse at 15% 10%, #e8f2ef 0%, transparent 45%), radial-gradient(ellipse at 90% 80%, #f3e6d8 0%, transparent 50%), #faf8f5",
-      }}
-    >
-      <form
-        onSubmit={onSubmit}
-        className="w-full max-w-md border border-[var(--border)] bg-white/90 p-6 sm:p-8"
-      >
-        <p className="text-xs font-semibold tracking-[0.2em] text-[var(--accent)] uppercase">
-          RestaurantOS
-        </p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-[var(--ink)]">
-          Platform Admin
-        </h1>
-        <p className="mt-2 text-sm text-[var(--muted)]">
-          Sign in to manage restaurant registrations across the SaaS platform.
-        </p>
-
-        <label className="mt-6 block text-xs font-medium text-[var(--muted)]">
-          Email
-          <Input
-            className="mt-1"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoComplete="username"
-            required
-          />
-        </label>
-        <label className="mt-4 block text-xs font-medium text-[var(--muted)]">
-          Password
-          <Input
-            className="mt-1"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
-            required
-          />
-        </label>
-
-        {error ? (
-          <p className="mt-4 rounded-[6px] border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-            {error}
+    <div className={styles.shell}>
+      <section className={styles.hero}>
+        <div className={styles.heroGlow} />
+        <div className={styles.heroPattern} />
+        <div>
+          <p className={styles.brandEyebrow}>SaaS control plane</p>
+          <h1 className={styles.brandMark}>RestaurantOS</h1>
+          <p className={styles.heroLead}>
+            Register restaurants, manage plans and billing, and keep every
+            tenant isolated — from one platform console.
           </p>
-        ) : null}
+          <ul className={styles.heroList}>
+            <li>
+              <span className={styles.dot} />
+              Tenant onboarding without public signup
+            </li>
+            <li>
+              <span className={styles.dot} />
+              Plan limits, trials, and Razorpay billing
+            </li>
+            <li>
+              <span className={styles.dot} />
+              Cross-restaurant visibility for operators
+            </li>
+          </ul>
+        </div>
+        <p className={styles.heroFoot}>Platform admin · demo seed account</p>
+      </section>
 
-        <Button type="submit" className="mt-6 w-full" size="lg" disabled={loading}>
-          {loading ? "Signing in…" : "Sign in to console"}
-        </Button>
+      <section className={styles.panel}>
+        <form onSubmit={onSubmit} className={styles.card}>
+          <div className={styles.mobileBrand}>
+            <p className={styles.brandEyebrow}>RestaurantOS</p>
+            <p className={styles.brandMark}>Admin</p>
+          </div>
 
-        <p className="mt-4 text-center text-xs text-[var(--muted)]">
-          Staff login is at{" "}
-          <a href="/login" className="text-[var(--accent)] underline-offset-2 hover:underline">
-            /login
-          </a>
-        </p>
-      </form>
+          <h2 className={styles.title}>Platform admin</h2>
+          <p className={styles.subtitle}>
+            Sign in to manage restaurant registrations across the SaaS
+            platform.
+          </p>
+
+          <label className="mt-6 block text-xs font-medium text-[var(--muted)]">
+            Email
+            <Input
+              className="mt-1"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="username"
+              required
+            />
+          </label>
+          <label className="mt-3 block text-xs font-medium text-[var(--muted)]">
+            Password
+            <Input
+              className="mt-1"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              required
+            />
+          </label>
+
+          {error ? (
+            <p className="mt-4 rounded-[6px] border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+              {error}
+            </p>
+          ) : null}
+
+          <Button
+            type="submit"
+            className="mt-5 w-full"
+            size="lg"
+            disabled={loading}
+          >
+            {loading ? "Signing in…" : "Sign in to console"}
+          </Button>
+
+          <p className={styles.meta}>
+            Restaurant staff? <a href="/login">Sign in at /login</a>
+          </p>
+        </form>
+      </section>
     </div>
   );
 }

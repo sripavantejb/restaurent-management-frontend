@@ -57,6 +57,7 @@ export const PAY_METHOD_LABEL: Record<string, string> = {
   CASH: "Cash",
   CARD: "Card",
   UPI: "UPI",
+  WALLET: "Wallet",
 };
 
 export const ROLE_LABEL: Record<string, string> = {

@@ -27,6 +27,7 @@ import {
   uid,
 } from "@/components/guest/utils";
 import styles from "@/components/guest/guest-theme.module.css";
+import { GuestSkeleton } from "@/components/ui/Skeleton";
 
 export default function GuestTableClient({
   slug,
@@ -47,6 +48,11 @@ export default function GuestTableClient({
   const [guestName, setGuestName] = useState("");
   const [busy, setBusy] = useState(false);
   const [diet, setDiet] = useState<Diet>("all");
+  const [excludeAllergen, setExcludeAllergen] = useState("");
+  const [favIds, setFavIds] = useState<string[]>([]);
+  const [ratingStars, setRatingStars] = useState(5);
+  const [ratingComment, setRatingComment] = useState("");
+  const [ratingSent, setRatingSent] = useState(false);
   const [search, setSearch] = useState("");
   const [activeCat, setActiveCat] = useState("");
   const [cart, setCart] = useState<CartLine[]>([]);
@@ -64,6 +70,25 @@ export default function GuestTableClient({
   const placingRef = useRef(false);
 
   const currency = boot?.restaurant.currency ?? "INR";
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("ros_guest_favs");
+      if (raw) setFavIds(JSON.parse(raw) as string[]);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  function toggleFav(id: string) {
+    setFavIds((prev) => {
+      const next = prev.includes(id)
+        ? prev.filter((x) => x !== id)
+        : [...prev, id];
+      localStorage.setItem("ros_guest_favs", JSON.stringify(next));
+      return next;
+    });
+  }
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -465,36 +490,48 @@ export default function GuestTableClient({
       if (diet === "veg" && !it.isVeg) return false;
       if (diet === "nonveg" && it.isVeg) return false;
       if (diet === "egg" && !it.isEgg) return false;
+      if (excludeAllergen) {
+        const a = (it.allergens || []).map((x) => x.toLowerCase());
+        if (a.includes(excludeAllergen.toLowerCase())) return false;
+      }
       if (search.trim()) {
         const q = search.toLowerCase();
         if (
           !it.name.toLowerCase().includes(q) &&
-          !(it.description || "").toLowerCase().includes(q)
+          !(it.description || "").toLowerCase().includes(q) &&
+          !(it.allergens || []).join(" ").toLowerCase().includes(q)
         )
           return false;
       }
       return true;
     });
-  }, [boot, activeCat, diet, search]);
+  }, [boot, activeCat, diet, search, excludeAllergen]);
+
+  const allergenOptions = useMemo(() => {
+    if (!boot) return [];
+    const set = new Set<string>();
+    for (const it of boot.items) {
+      for (const a of it.allergens || []) set.add(a);
+    }
+    return [...set].sort();
+  }, [boot]);
 
   const quickReorder = useMemo(() => {
     if (!boot) return [];
+    const favs = boot.items.filter(
+      (i) => i.isAvailable && favIds.includes(i.id)
+    );
+    if (favs.length) return favs.slice(0, 6);
     return boot.items
       .filter((i) => i.isAvailable && (i.repeatRate ?? 0) >= 0.3)
       .slice(0, 6);
-  }, [boot]);
+  }, [boot, favIds]);
 
   const sessionTotal = checkout?.session.total ?? boot?.openSession?.total ?? 0;
   const rounds = checkout?.session.rounds ?? boot?.openSession?.rounds ?? 0;
 
   if (phase === "loading") {
-    return (
-      <div className={styles.shell}>
-        <p className={styles.muted} style={{ textAlign: "center", marginTop: 80 }}>
-          Loading your table…
-        </p>
-      </div>
-    );
+    return <GuestSkeleton />;
   }
 
   if (phase === "paid") {
@@ -509,15 +546,84 @@ export default function GuestTableClient({
             {formatMoney(paidAmount, currency)}
           </p>
           <p className={styles.muted} style={{ lineHeight: 1.5 }}>
-            Table {boot?.table.number ?? ""} is clear for the next guests. The same
-            QR on this table starts a fresh session — no reprint needed.
+            Table {boot?.table.number ?? ""} is clear for the next guests.
           </p>
+
+          {!ratingSent ? (
+            <div style={{ marginTop: 24, textAlign: "left", maxWidth: 320, marginInline: "auto" }}>
+              <p className={styles.muted} style={{ marginBottom: 8 }}>
+                Rate your visit
+              </p>
+              <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    className={styles.chip}
+                    style={{
+                      opacity: n <= ratingStars ? 1 : 0.4,
+                      fontWeight: 700,
+                    }}
+                    onClick={() => setRatingStars(n)}
+                  >
+                    {n}★
+                  </button>
+                ))}
+              </div>
+              <textarea
+                className={styles.search}
+                style={{ width: "100%", minHeight: 64, marginBottom: 8 }}
+                placeholder="Optional comment"
+                value={ratingComment}
+                onChange={(e) => setRatingComment(e.target.value)}
+              />
+              <button
+                type="button"
+                className={styles.btnPrimary}
+                style={{ width: "100%" }}
+                disabled={busy}
+                onClick={async () => {
+                  if (!boot) return;
+                  setBusy(true);
+                  try {
+                    await fetch(apiUrl("/api/guest/ratings"), {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        restaurantId: boot.restaurant.id,
+                        branchId: boot.branch.id,
+                        tableId: boot.table.id,
+                        sessionId: boot.openSession?.id,
+                        deviceId: getDeviceId(),
+                        stars: ratingStars,
+                        comment: ratingComment,
+                      }),
+                    });
+                    setRatingSent(true);
+                    showToast("Thanks for the rating!");
+                  } catch {
+                    showToast("Could not save rating");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                Submit rating
+              </button>
+            </div>
+          ) : (
+            <p className={styles.muted} style={{ marginTop: 16 }}>
+              Rating saved — see you again!
+            </p>
+          )}
+
           <button
             type="button"
             className={styles.btnPrimary}
             style={{ marginTop: 20 }}
             onClick={() => {
               setPaidAmount(0);
+              setRatingSent(false);
               void loadBootstrap();
             }}
           >
@@ -593,17 +699,51 @@ export default function GuestTableClient({
           />
 
           {phase === "menu" ? (
-            <GuestMenu
+            <>
+              {allergenOptions.length > 0 ? (
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 8,
+                    overflowX: "auto",
+                    padding: "8px 14px",
+                  }}
+                >
+                  <button
+                    type="button"
+                    className={`${styles.chip} ${!excludeAllergen ? styles.chipActive : ""}`}
+                    onClick={() => setExcludeAllergen("")}
+                  >
+                    All allergens ok
+                  </button>
+                  {allergenOptions.map((a) => (
+                    <button
+                      key={a}
+                      type="button"
+                      className={`${styles.chip} ${excludeAllergen === a ? styles.chipAccent : ""}`}
+                      onClick={() =>
+                        setExcludeAllergen((prev) => (prev === a ? "" : a))
+                      }
+                    >
+                      Hide {a}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              <GuestMenu
               categories={boot.categories}
               activeCat={activeCat}
               items={filteredItems}
               currency={currency}
               qtyByItemId={qtyByItemId}
+              favIds={favIds}
+              onToggleFav={toggleFav}
               onCategory={setActiveCat}
               onOpenItem={openConfig}
               onIncSimple={(it) => addToCart(it, "", [], "", 1)}
               onDecSimple={decSimple}
             />
+            </>
           ) : null}
 
           {phase === "track" ? (

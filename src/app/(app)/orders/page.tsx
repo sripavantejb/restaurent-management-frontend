@@ -15,6 +15,7 @@ import {
   label,
 } from "@/lib/labels";
 import { formatMoney } from "@/lib/money";
+import { TablePageSkeleton } from "@/components/ui/Skeleton";
 
 interface Order {
   id: string;
@@ -47,6 +48,7 @@ export default function OrdersPage() {
     paidAt: string;
   } | null>(null);
   const [error, setError] = useState("");
+  const [ready, setReady] = useState(false);
   const [busyApprove, setBusyApprove] = useState(false);
   const [approvalsOpen, setApprovalsOpen] = useState(true);
 
@@ -71,6 +73,8 @@ export default function OrdersPage() {
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load orders");
+    } finally {
+      setReady(true);
     }
   }, [activeBranchId, status, type, from, to]);
 
@@ -118,6 +122,8 @@ export default function OrdersPage() {
       setBusyApprove(false);
     }
   }
+
+  if (!ready) return <TablePageSkeleton />;
 
   return (
     <div className="p-4 sm:p-6">

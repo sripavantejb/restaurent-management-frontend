@@ -23,6 +23,8 @@ export interface MenuItem {
   isEgg: boolean;
   isAvailable: boolean;
   spiceLevel: number;
+  allergens?: string[];
+  tags?: string[];
   variants: Variant[];
   addons: Addon[];
   bestseller?: boolean;

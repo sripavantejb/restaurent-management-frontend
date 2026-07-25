@@ -36,8 +36,38 @@ async function byStatus(
   };
 }
 
-export async function getOccupiedTables(ctx: AiTenantCtx) {
-  return byStatus(ctx, ["OCCUPIED", "PREPARING_BILL"], "Occupied / billing");
+export async function getOccupiedTables(ctx: AiTenantCtx): Promise<ToolResult> {
+  const tables = (await Table.find(base(ctx)).lean()) as unknown as ITable[];
+  const matched = tables
+    .filter((t) =>
+      ["OCCUPIED", "PREPARING_BILL"].includes(normalizeTableStatus(t.status))
+    )
+    .sort((a, b) => a.number - b.number);
+  const nums = matched.map((t) => t.number).join(", ");
+  return {
+    ok: true,
+    summary:
+      matched.length === 0
+        ? "No tables are occupied right now."
+        : `${matched.length} occupied: Table ${nums}.`,
+    data: { tables: matched.map((t) => t.number), count: matched.length },
+    blocks: [
+      {
+        type: "table",
+        title: "Occupied / billing",
+        data: {
+          columns: ["number", "status", "capacity", "vip", "outdoor"],
+          rows: matched.map((t) => ({
+            number: t.number,
+            status: normalizeTableStatus(t.status),
+            capacity: t.capacity,
+            vip: t.isVip ? "Yes" : "No",
+            outdoor: t.isOutdoor ? "Yes" : "No",
+          })),
+        },
+      },
+    ],
+  };
 }
 
 export async function getAvailableTables(ctx: AiTenantCtx) {

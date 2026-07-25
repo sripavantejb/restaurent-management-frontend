@@ -1,17 +1,22 @@
-import { hasLlmKey, llmApiKey, embeddingsUrl, embeddingModelName } from "../gateway/llm-config";
+import {
+  hasLlmKey,
+  embeddingApiKey,
+  embeddingsUrl,
+  embeddingModelName,
+} from "../gateway/llm-config";
 
 export function embeddingModel() {
   return embeddingModelName();
 }
 
 export function embeddingsAvailable() {
-  return hasLlmKey();
+  return Boolean(embeddingApiKey());
 }
 
 /** Batch embed texts. Returns empty vectors if no API key. */
 export async function embedTexts(texts: string[]): Promise<number[][]> {
   if (!texts.length) return [];
-  const key = llmApiKey();
+  const key = embeddingApiKey();
   if (!key) {
     return texts.map(() => []);
   }
@@ -66,7 +71,7 @@ export async function embedTexts(texts: string[]): Promise<number[][]> {
 }
 
 export async function embedQuery(query: string): Promise<number[]> {
-  const key = llmApiKey();
+  const key = embeddingApiKey();
   if (!key) return [];
 
   // Prefer query input_type for NVIDIA embedqa models

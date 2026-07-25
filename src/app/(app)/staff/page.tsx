@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { formatMoney } from "@/lib/money";
+import { TablePageSkeleton } from "@/components/ui/Skeleton";
 
 interface StaffUser {
   id: string;
@@ -35,6 +36,7 @@ export default function StaffPage() {
   const [perf, setPerf] = useState<WaiterPerf[]>([]);
   const [days, setDays] = useState(7);
   const [error, setError] = useState("");
+  const [ready, setReady] = useState(false);
   const [toast, setToast] = useState("");
   const [busy, setBusy] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -59,6 +61,8 @@ export default function StaffPage() {
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load staff");
+    } finally {
+      setReady(true);
     }
   }, [activeBranchId, canManage, days]);
 
@@ -112,6 +116,8 @@ export default function StaffPage() {
       </div>
     );
   }
+
+  if (!ready) return <TablePageSkeleton />;
 
   const branchName =
     branches.find((b) => b.id === activeBranchId)?.name ?? "Branch";

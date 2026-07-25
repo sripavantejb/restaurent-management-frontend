@@ -7,6 +7,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { Sidebar } from "@/components/Sidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { NotificationBell } from "@/components/NotificationBell";
+import { SessionSkeleton, Skeleton } from "@/components/ui/Skeleton";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { loading, user, restaurant } = useAuth();
@@ -18,26 +19,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center px-4 text-[var(--muted)]">
-        Loading session…
-      </div>
-    );
+    return <SessionSkeleton />;
   }
 
   if (!user) {
     return (
-      <div className="flex min-h-screen items-center justify-center px-4 text-[var(--muted)]">
-        Redirecting to login…
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[var(--surface)] px-4">
+        <Skeleton className="h-5 w-40" />
+        <Skeleton className="h-3 w-56" />
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[var(--surface)]">
+    <div className="flex h-[100dvh] overflow-hidden bg-[var(--surface)]">
       <Sidebar open={navOpen} onClose={() => setNavOpen(false)} />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="flex h-12 shrink-0 items-center gap-3 border-b border-[var(--border)] bg-[var(--surface)] px-3 lg:hidden">
+        <header className="flex h-12 shrink-0 items-center gap-3 border-b border-[var(--border)] bg-[var(--surface)] px-3 pt-[env(safe-area-inset-top)] lg:hidden">
           <button
             type="button"
             className="rounded-[6px] p-2 text-[var(--ink)] hover:bg-[var(--surface-2)]"
@@ -53,7 +51,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <NotificationBell />
           <ThemeToggle />
         </header>
-        <main className="min-h-0 min-w-0 flex-1 overflow-auto">{children}</main>
+        <main className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain">{children}</main>
       </div>
     </div>
   );

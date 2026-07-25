@@ -2,6 +2,7 @@
 
 import { useAuth } from "@/components/AuthProvider";
 import { ROLE_LABEL, label } from "@/lib/labels";
+import { FloorSkeleton, Skeleton } from "@/components/ui/Skeleton";
 
 export default function WaiterLayout({
   children,
@@ -12,17 +13,14 @@ export default function WaiterLayout({
     useAuth();
 
   if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[var(--surface)] px-4 text-[var(--muted)]">
-        Loading waiter floor…
-      </div>
-    );
+    return <FloorSkeleton />;
   }
 
   if (!user) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[var(--surface)] px-4 text-[var(--muted)]">
-        Redirecting to login…
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[var(--surface)] px-4">
+        <Skeleton className="h-5 w-40" />
+        <Skeleton className="h-3 w-56" />
       </div>
     );
   }

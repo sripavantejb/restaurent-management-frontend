@@ -1,10 +1,11 @@
-import { COPILOT_SYSTEM_PROMPT } from "../prompts";
+import { COPILOT_SYSTEM_PROMPT, POLISH_SYSTEM_PROMPT } from "../prompts";
 import type { AiToolDefinition } from "../types";
 import { toolsForOpenAI } from "../registry/tools";
 import {
   chatCompletionsUrl,
   chatModelName,
   hasLlmKey,
+  hasOpenAiChatKey,
   llmApiKey,
   llmProvider,
   nvidiaChatExtras,
@@ -130,6 +131,7 @@ export async function runOpenAiWithTools(input: {
 export async function streamOpenAiFinal(input: {
   messages: ChatMsg[];
   onDelta: (text: string) => void;
+  systemPrompt?: string;
 }): Promise<string> {
   const key = llmApiKey();
   if (!key) throw new Error("Missing NVIDIA_API_KEY or OPENAI_API_KEY");
@@ -144,14 +146,17 @@ export async function streamOpenAiFinal(input: {
     body: JSON.stringify({
       model: chatModelName(),
       messages: [
-        { role: "system", content: COPILOT_SYSTEM_PROMPT },
+        {
+          role: "system",
+          content: input.systemPrompt || COPILOT_SYSTEM_PROMPT,
+        },
         ...input.messages,
       ],
       stream: true,
       temperature: llmProvider() === "nvidia" ? 0.6 : 0.3,
       ...(llmProvider() === "nvidia"
         ? { max_tokens: 4096, ...nvidiaChatExtras() }
-        : {}),
+        : { max_tokens: 1200 }),
     }),
   });
 
@@ -192,4 +197,32 @@ export async function streamOpenAiFinal(input: {
   }
 
   return full;
+}
+
+/** Polish live tool summaries with OpenAI (or configured chat provider). */
+export async function polishToolAnswer(input: {
+  question: string;
+  toolSummaries: string[];
+  onDelta: (text: string) => void;
+}): Promise<string> {
+  if (!hasOpenAiChatKey() && !hasLlmKey()) {
+    throw new Error("No chat LLM key");
+  }
+  return streamOpenAiFinal({
+    systemPrompt: POLISH_SYSTEM_PROMPT,
+    onDelta: input.onDelta,
+    messages: [
+      {
+        role: "user",
+        content: [
+          `Staff question: ${input.question}`,
+          "",
+          "Live database tool results (authoritative — do not invent beyond this):",
+          input.toolSummaries.join("\n\n") || "(no tool data)",
+          "",
+          "Write the final staff-facing answer now.",
+        ].join("\n"),
+      },
+    ],
+  });
 }

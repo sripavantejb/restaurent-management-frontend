@@ -5,6 +5,7 @@ import { apiFetch, useAuth } from "@/components/AuthProvider";
 import { Card } from "@/components/ui/Card";
 import { TABLE_STATUS_LABEL, label } from "@/lib/labels";
 import { formatMoney } from "@/lib/money";
+import { ConsolePageSkeleton } from "@/components/ui/Skeleton";
 
 interface Summary {
   kpis: {
@@ -81,9 +82,7 @@ export default function DashboardPage() {
   }
 
   if (!data) {
-    return (
-      <div className="p-6 text-[var(--muted)]">Loading live branch metrics…</div>
-    );
+    return <ConsolePageSkeleton />;
   }
 
   const maxHour = Math.max(...data.hourly.map((h) => h.revenue), 1);

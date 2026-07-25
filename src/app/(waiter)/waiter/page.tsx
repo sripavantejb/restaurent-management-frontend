@@ -17,6 +17,7 @@ import {
   label,
 } from "@/lib/labels";
 import { ApprovalQueue } from "@/components/ApprovalQueue";
+import { FloorSkeleton } from "@/components/ui/Skeleton";
 
 interface TableRow {
   id: string;
@@ -96,6 +97,7 @@ export default function WaiterFloorPage() {
   const [catId, setCatId] = useState("all");
   const [tab, setTab] = useState<Tab>("floor");
   const [error, setError] = useState("");
+  const [ready, setReady] = useState(false);
   const [toast, setToast] = useState("");
   const [busy, setBusy] = useState(false);
   const [openCalls, setOpenCalls] = useState(0);
@@ -178,6 +180,8 @@ export default function WaiterFloorPage() {
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load floor");
+    } finally {
+      setReady(true);
     }
   }, [activeBranchId]);
 
@@ -363,6 +367,8 @@ export default function WaiterFloorPage() {
       </div>
     );
   }
+
+  if (!ready) return <FloorSkeleton />;
 
   return (
     <div
@@ -564,9 +570,25 @@ export default function WaiterFloorPage() {
                           SESSION_STATUS_LABEL,
                           selected.currentSession.status
                         )
-                      : "No open session"}
+                      : label(TABLE_STATUS_LABEL, selected.status)}
                   </p>
                 </div>
+                {selected.status === "CLEANING" ? (
+                  <Button
+                    size="sm"
+                    onClick={async () => {
+                      await apiFetch(`/api/tables/${selected.id}`, {
+                        method: "PATCH",
+                        branchId: activeBranchId,
+                        body: JSON.stringify({ status: "AVAILABLE" }),
+                      });
+                      setSelected(null);
+                      void load();
+                    }}
+                  >
+                    Mark available
+                  </Button>
+                ) : null}
                 {selected.currentSession &&
                 selected.currentSession.dueAmount > 0 &&
                 hasPermission("payments.create") ? (

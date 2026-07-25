@@ -10,6 +10,9 @@ const UpdateSchema = z.object({
   prepTimeMins: z.number().int().positive().optional(),
   isAvailable: z.boolean().optional(),
   categoryId: z.string().optional(),
+  allergens: z.array(z.string()).optional(),
+  hsnCode: z.string().max(16).optional(),
+  stationCode: z.string().max(16).optional(),
   variants: z
     .array(z.object({ name: z.string(), priceDelta: z.number().int() }))
     .optional(),

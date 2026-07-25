@@ -5,6 +5,7 @@ import { apiFetch, useAuth } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
+import { ConsolePageSkeleton } from "@/components/ui/Skeleton";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -83,9 +84,16 @@ export default function SettingsPage() {
   }
 
   if (!s) {
-    return (
-      <div className="p-6 text-[var(--muted)]">{error || "Loading…"}</div>
-    );
+    if (error) {
+      return (
+        <div className="p-6">
+          <p className="rounded-[6px] border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+            {error}
+          </p>
+        </div>
+      );
+    }
+    return <ConsolePageSkeleton />;
   }
 
   const tabs = [

@@ -45,16 +45,12 @@ export const GET = withAuth(async ({ tenant, user }) => {
       profitBlocks: profit?.blocks ?? [],
     },
     suggestions: SUGGESTED_PROMPTS,
-    openaiConfigured: Boolean(
-      process.env.NVIDIA_API_KEY?.trim() ||
-        process.env.NGC_API_KEY?.trim() ||
-        process.env.OPENAI_API_KEY?.trim()
-    ),
-    llmProvider: process.env.NVIDIA_API_KEY?.trim() ||
-      process.env.NGC_API_KEY?.trim()
-      ? "nvidia"
-      : process.env.OPENAI_API_KEY?.trim()
-        ? "openai"
-        : "none",
+    openaiConfigured: Boolean(process.env.OPENAI_API_KEY?.trim()),
+    llmProvider: process.env.OPENAI_API_KEY?.trim()
+      ? ("openai" as const)
+      : process.env.NVIDIA_API_KEY?.trim() || process.env.NGC_API_KEY?.trim()
+        ? ("nvidia" as const)
+        : ("none" as const),
+    chatMode: "db-tools-then-polish" as const,
   });
 }, "ai.use");

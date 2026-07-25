@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { formatMoney, toPaise } from "@/lib/money";
+import { TablePageSkeleton } from "@/components/ui/Skeleton";
 
 interface Category {
   id: string;
@@ -20,6 +21,9 @@ interface Item {
   isVeg: boolean;
   isAvailable: boolean;
   prepTimeMins: number;
+  allergens?: string[];
+  hsnCode?: string;
+  stationCode?: string;
 }
 
 export default function MenuPage() {
@@ -27,6 +31,7 @@ export default function MenuPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [error, setError] = useState("");
+  const [ready, setReady] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editing, setEditing] = useState<Item | null>(null);
   const [form, setForm] = useState({
@@ -36,6 +41,9 @@ export default function MenuPage() {
     categoryId: "",
     isVeg: true,
     prepTimeMins: "15",
+    allergens: "",
+    hsnCode: "996331",
+    stationCode: "",
   });
 
   const load = useCallback(async () => {
@@ -47,6 +55,8 @@ export default function MenuPage() {
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load menu");
+    } finally {
+      setReady(true);
     }
   }, [activeBranchId]);
 
@@ -81,6 +91,9 @@ export default function MenuPage() {
       categoryId: categories[0]?.id ?? "",
       isVeg: true,
       prepTimeMins: "15",
+      allergens: "",
+      hsnCode: "996331",
+      stationCode: "",
     });
     setEditOpen(true);
   }
@@ -94,6 +107,9 @@ export default function MenuPage() {
       categoryId: item.categoryId,
       isVeg: item.isVeg,
       prepTimeMins: String(item.prepTimeMins),
+      allergens: (item.allergens || []).join(", "),
+      hsnCode: item.hsnCode || "996331",
+      stationCode: item.stationCode || "",
     });
     setEditOpen(true);
   }
@@ -107,6 +123,12 @@ export default function MenuPage() {
         categoryId: form.categoryId,
         isVeg: form.isVeg,
         prepTimeMins: Number(form.prepTimeMins) || 15,
+        allergens: form.allergens
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
+        hsnCode: form.hsnCode.trim() || "996331",
+        stationCode: form.stationCode.trim().toUpperCase(),
       };
       if (editing) {
         await apiFetch(`/api/menu/${editing.id}`, {
@@ -130,6 +152,8 @@ export default function MenuPage() {
 
   const catName = (id: string) =>
     categories.find((c) => c.id === id)?.name ?? "—";
+
+  if (!ready) return <TablePageSkeleton />;
 
   return (
     <div className="p-4 sm:p-6">
@@ -199,6 +223,7 @@ export default function MenuPage() {
       </div>
 
       <div className="mt-4 hidden overflow-auto rounded-[6px] border border-[var(--border)] bg-white sm:block">
+        <div className="table-scroll">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-[var(--border)] bg-[var(--surface-2)] text-xs text-[var(--muted)]">
             <tr>
@@ -251,6 +276,7 @@ export default function MenuPage() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       <Modal
@@ -306,6 +332,34 @@ export default function MenuPage() {
               onChange={(e) => setForm({ ...form, isVeg: e.target.checked })}
             />
             Vegetarian
+          </label>
+          <label className="block text-xs text-[var(--muted)]">
+            Allergens (comma-separated)
+            <Input
+              className="mt-1"
+              placeholder="dairy, nuts, gluten"
+              value={form.allergens}
+              onChange={(e) => setForm({ ...form, allergens: e.target.value })}
+            />
+          </label>
+          <label className="block text-xs text-[var(--muted)]">
+            HSN code
+            <Input
+              className="mt-1"
+              value={form.hsnCode}
+              onChange={(e) => setForm({ ...form, hsnCode: e.target.value })}
+            />
+          </label>
+          <label className="block text-xs text-[var(--muted)]">
+            KDS station code
+            <Input
+              className="mt-1"
+              placeholder="GRILL / BAR / COLD"
+              value={form.stationCode}
+              onChange={(e) =>
+                setForm({ ...form, stationCode: e.target.value })
+              }
+            />
           </label>
           <Button className="w-full" onClick={() => void save()}>
             Save

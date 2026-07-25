@@ -2,9 +2,25 @@ import { Order } from "@/models/Order";
 import { Restaurant } from "@/models/Restaurant";
 import { Table } from "@/models/Table";
 import { User } from "@/models/User";
+import { MenuItem } from "@/models/MenuItem";
 import { withAuth, json, error, getParams } from "@/lib/api";
 import { buildInvoice, invoiceToPrintText } from "@/lib/invoice";
 import { writeAudit } from "@/lib/audit";
+
+async function hsnMapForOrder(order: {
+  items: { menuItemId: { toString(): string } }[];
+}) {
+  const ids = order.items.map((i) => i.menuItemId);
+  const menu = (await MenuItem.find({ _id: { $in: ids } })
+    .select("hsnCode")
+    .lean()) as unknown as {
+    _id: { toString(): string };
+    hsnCode?: string;
+  }[];
+  return new Map(
+    menu.map((m) => [m._id.toString(), m.hsnCode || "996331"])
+  );
+}
 
 export const GET = withAuth(async ({ req, tenant }) => {
   const { id } = getParams(req);
@@ -17,7 +33,7 @@ export const GET = withAuth(async ({ req, tenant }) => {
   });
   if (!order) return error("Order not found", 404);
 
-  const [restaurant, table, waiterDoc] = await Promise.all([
+  const [restaurant, table, waiterDoc, hsnMap] = await Promise.all([
     Restaurant.findById(tenant.restaurantId).lean(),
     order.tableId
       ? Table.findById(order.tableId).lean()
@@ -25,6 +41,7 @@ export const GET = withAuth(async ({ req, tenant }) => {
     order.waiterId
       ? User.findById(order.waiterId).select("name").lean<{ name?: string }>()
       : Promise.resolve(null),
+    hsnMapForOrder(order),
   ]);
 
   if (!restaurant) return error("Restaurant not found", 404);
@@ -45,13 +62,19 @@ export const GET = withAuth(async ({ req, tenant }) => {
       qty: i.qty,
       unitPrice: i.unitPrice,
       amount: i.qty * i.unitPrice,
+      hsnCode: hsnMap.get(i.menuItemId.toString()) || "996331",
     })),
     subtotal: order.subtotal,
     discount: order.discountAmount,
-    gstRate: 0.05,
+    gstRate: restaurant.taxSettings?.gstRate
+      ? restaurant.taxSettings.gstRate / 100
+      : 0.05,
     paymentStatus: order.status === "COMPLETED" ? "PAID" : "PENDING",
-    footerNote: "Thank you for dining with us",
-    terms: "All prices in INR. Taxes as applicable.",
+    footerNote:
+      restaurant.receiptSettings?.thankYou || "Thank you for dining with us",
+    terms:
+      restaurant.receiptSettings?.terms ||
+      "All prices in INR. Taxes as applicable.",
   });
 
   await writeAudit({

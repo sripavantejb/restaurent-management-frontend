@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { apiFetch, useAuth } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/Button";
+import { ConsolePageSkeleton } from "@/components/ui/Skeleton";
 
 interface Analytics {
   scansPerDay: Record<string, number>;
@@ -76,9 +77,9 @@ export default function QrAnalyticsPage() {
         <p className="bg-red-50 px-6 py-2 text-sm text-red-800">{error}</p>
       ) : null}
 
-      <div className="flex-1 space-y-6 overflow-auto p-6">
+      <div className="flex-1 space-y-6 overflow-auto p-4 sm:p-6">
         {loading || !data ? (
-          <p className="text-sm text-[var(--muted)]">Loading analytics…</p>
+          <ConsolePageSkeleton />
         ) : (
           <>
             <div className="grid gap-3 sm:grid-cols-3">

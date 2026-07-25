@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { apiFetch, useAuth } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { TablePageSkeleton } from "@/components/ui/Skeleton";
 
 export default function MarketingPage() {
   const { activeBranchId, hasPermission } = useAuth();
@@ -24,12 +25,17 @@ export default function MarketingPage() {
     type: "PERCENT",
     value: "10",
   });
+  const [ready, setReady] = useState(false);
 
   const load = useCallback(async () => {
     if (!activeBranchId) return;
-    const data = await apiFetch("/api/marketing", { branchId: activeBranchId });
-    setCampaigns(data.campaigns);
-    setCoupons(data.coupons);
+    try {
+      const data = await apiFetch("/api/marketing", { branchId: activeBranchId });
+      setCampaigns(data.campaigns);
+      setCoupons(data.coupons);
+    } finally {
+      setReady(true);
+    }
   }, [activeBranchId]);
 
   useEffect(() => {
@@ -39,6 +45,8 @@ export default function MarketingPage() {
   if (!hasPermission("reports.view")) {
     return <div className="p-6 text-sm text-[var(--muted)]">No access</div>;
   }
+
+  if (!ready) return <TablePageSkeleton />;
 
   return (
     <div className="space-y-6 p-4 sm:p-6">

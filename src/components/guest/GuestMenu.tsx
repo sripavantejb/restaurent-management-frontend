@@ -16,6 +16,8 @@ export function GuestMenu({
   items,
   currency,
   qtyByItemId,
+  favIds,
+  onToggleFav,
   onCategory,
   onOpenItem,
   onIncSimple,
@@ -26,6 +28,8 @@ export function GuestMenu({
   items: MenuItem[];
   currency: string;
   qtyByItemId: Record<string, number>;
+  favIds?: string[];
+  onToggleFav?: (id: string) => void;
   onCategory: (id: string) => void;
   onOpenItem: (item: MenuItem) => void;
   onIncSimple: (item: MenuItem) => void;
@@ -91,6 +95,32 @@ export function GuestMenu({
                   key={it.id}
                   className={`${styles.menuItem} g-menu-item ${unavailable ? styles.menuItemDisabled : ""}`}
                 >
+                  {onToggleFav ? (
+                    <button
+                      type="button"
+                      aria-label={
+                        favIds?.includes(it.id)
+                          ? "Remove favorite"
+                          : "Save favorite"
+                      }
+                      onClick={() => onToggleFav(it.id)}
+                      style={{
+                        position: "absolute",
+                        top: 10,
+                        right: 48,
+                        zIndex: 2,
+                        border: "none",
+                        background: "transparent",
+                        cursor: "pointer",
+                        fontSize: 18,
+                        lineHeight: 1,
+                        color: favIds?.includes(it.id) ? "#b45309" : "#9a938a",
+                        padding: 4,
+                      }}
+                    >
+                      {favIds?.includes(it.id) ? "★" : "☆"}
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     disabled={unavailable}
@@ -118,6 +148,11 @@ export function GuestMenu({
                     {it.description ? (
                       <p className={styles.muted} style={{ margin: "6px 0 0", fontSize: 13 }}>
                         {it.description}
+                      </p>
+                    ) : null}
+                    {it.allergens && it.allergens.length > 0 ? (
+                      <p className={styles.muted} style={{ margin: "4px 0 0", fontSize: 11 }}>
+                        Allergens: {it.allergens.join(", ")}
                       </p>
                     ) : null}
                     <div className={styles.menuItemMeta}>
