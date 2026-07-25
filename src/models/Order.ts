@@ -36,6 +36,9 @@ export interface IOrder {
     | "SERVED"
     | "COMPLETED"
     | "CANCELLED";
+  /** Payment truth persisted with the order (updated by Payment APIs). */
+  paymentStatus: "UNPAID" | "PARTIAL" | "PAID" | "REFUNDED";
+  paidAmountPaise: number;
   items: IOrderItem[];
   subtotal: number;
   discountAmount: number;
@@ -102,7 +105,15 @@ const OrderSchema = new Schema(
         "CANCELLED",
       ],
       default: "DRAFT",
+      index: true,
     },
+    paymentStatus: {
+      type: String,
+      enum: ["UNPAID", "PARTIAL", "PAID", "REFUNDED"],
+      default: "UNPAID",
+      index: true,
+    },
+    paidAmountPaise: { type: Number, default: 0 },
     items: { type: [OrderItemSchema], default: [] },
     subtotal: { type: Number, required: true, default: 0 },
     discountAmount: { type: Number, required: true, default: 0 },
@@ -119,6 +130,7 @@ const OrderSchema = new Schema(
 OrderSchema.plugin(tenantPlugin);
 OrderSchema.index({ restaurantId: 1, branchId: 1, orderNumber: 1 }, { unique: true });
 OrderSchema.index({ restaurantId: 1, branchId: 1, status: 1, placedAt: -1 });
+OrderSchema.index({ restaurantId: 1, branchId: 1, paymentStatus: 1, placedAt: -1 });
 OrderSchema.index({ sessionId: 1 });
 OrderSchema.index(
   { restaurantId: 1, branchId: 1, idempotencyKey: 1 },

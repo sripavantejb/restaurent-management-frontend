@@ -14,6 +14,7 @@ import {
   recomputeSessionTotals,
   validateOrderMoney,
 } from "@/lib/session";
+import { allocateOrderNumber } from "@/lib/order-number";
 
 const GUEST_COOKIE = "ros_guest";
 
@@ -194,11 +195,11 @@ export const POST = withGuest(async (req) => {
     }
 
     const roundNumber = (Number(session.rounds) || 0) + 1;
-    const count = await Order.countDocuments({
-      restaurantId: session.restaurantId,
-      branchId: session.branchId,
-    });
-    const orderNumber = `${branch.code}-${String(count + 1).padStart(4, "0")}`;
+    const orderNumber = await allocateOrderNumber(
+      session.restaurantId,
+      session.branchId,
+      branch.code || "B1"
+    );
     const approvalMode = restaurant.qrApprovalMode === true;
 
     const orderPayload = {
@@ -216,6 +217,8 @@ export const POST = withGuest(async (req) => {
         | "PENDING"
         | "NONE",
       status: (approvalMode ? "DRAFT" : "PLACED") as "DRAFT" | "PLACED",
+      paymentStatus: "UNPAID" as const,
+      paidAmountPaise: 0,
       items: orderLines,
       ...money,
       placedAt: new Date(),

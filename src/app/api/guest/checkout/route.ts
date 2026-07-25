@@ -144,11 +144,13 @@ export const POST = withGuest(async (req) => {
         branchId: session.branchId,
         sessionId: session._id,
         orderId: null,
+        kind: "CHARGE",
         method: body.method || "UPI",
         amount,
         tenderedAmount: amount,
         changeAmount: 0,
         tipAmount: fresh.tipAmount,
+        notes: "Guest checkout (recorded)",
         paidAt: new Date(),
       });
 

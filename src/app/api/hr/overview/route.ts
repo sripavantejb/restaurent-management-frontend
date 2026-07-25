@@ -4,6 +4,12 @@ import { LeaveRequest } from "@/models/LeaveRequest";
 import { PayrollEntry } from "@/models/PayrollEntry";
 import { withAuth, json } from "@/lib/api";
 
+type UserLean = {
+  _id: { toString(): string };
+  name: string;
+  role: string;
+};
+
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -17,13 +23,13 @@ export const GET = withAuth(async ({ tenant }) => {
   const today = todayKey();
   const period = periodNow();
 
-  const users = await User.find({
+  const users = (await User.find({
     restaurantId: tenant.restaurantId,
     branchId: tenant.branchId,
     isActive: true,
   })
     .select("name role")
-    .lean();
+    .lean()) as unknown as UserLean[];
 
   const [attToday, pendingLeaves, payrollRows, monthLeaves] =
     await Promise.all([

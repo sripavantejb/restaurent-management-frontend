@@ -69,7 +69,12 @@ export const GET = withAuth(async ({ req, tenant }) => {
     gstRate: restaurant.taxSettings?.gstRate
       ? restaurant.taxSettings.gstRate / 100
       : 0.05,
-    paymentStatus: order.status === "COMPLETED" ? "PAID" : "PENDING",
+    paymentStatus:
+      order.paymentStatus === "PAID" || order.status === "COMPLETED"
+        ? "PAID"
+        : order.paymentStatus === "PARTIAL"
+          ? "PARTIAL"
+          : "PENDING",
     footerNote:
       restaurant.receiptSettings?.thankYou || "Thank you for dining with us",
     terms:

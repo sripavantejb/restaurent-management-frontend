@@ -2,6 +2,7 @@
  * Seed RestaurantOS — rich realistic mock data for Tiffinate (Hyderabad).
  * Run: npm run seed
  *
+ * SAFETY: refuses to run against production-like URIs unless ALLOW_SEED=1.
  * Demo password for all accounts: demo1234
  */
 import { readFileSync } from "fs";
@@ -26,6 +27,25 @@ for (const envPath of envCandidates) {
     break;
   } catch {
     /* try next */
+  }
+}
+
+function assertSeedAllowed(uri: string) {
+  const allow = process.env.ALLOW_SEED === "1";
+  const looksProd =
+    process.env.NODE_ENV === "production" ||
+    /prod|production|live/i.test(uri) ||
+    process.env.VERCEL_ENV === "production";
+  if (looksProd && !allow) {
+    console.error(
+      "Refusing to seed: set ALLOW_SEED=1 only if you intentionally wipe this database."
+    );
+    process.exit(1);
+  }
+  if (!allow && !/127\.0\.0\.1|localhost|cluster0/i.test(uri)) {
+    console.warn(
+      "Tip: set ALLOW_SEED=1 to confirm seeding a remote MongoDB cluster."
+    );
   }
 }
 
@@ -149,6 +169,7 @@ const CUSTOMER_NAMES = [
 ];
 
 async function main() {
+  assertSeedAllowed(MONGODB_URI);
   console.log("Connecting to", MONGODB_URI.replace(/:[^:@]+@/, ":***@"));
   await mongoose.connect(MONGODB_URI);
   const db = mongoose.connection.db!;

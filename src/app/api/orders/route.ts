@@ -6,6 +6,7 @@ import { TableSession } from "@/models/TableSession";
 import { withAuth, json, error } from "@/lib/api";
 import { calcTax, calcTotal } from "@/lib/money";
 import { nextSessionNumber, recomputeSessionTotals } from "@/lib/session";
+import { allocateOrderNumber } from "@/lib/order-number";
 
 const ItemSchema = z.object({
   menuItemId: z.string().min(1),
@@ -25,16 +26,6 @@ const CreateOrderSchema = z.object({
   source: z.enum(["POS", "WAITER"]).optional(),
 });
 
-async function nextOrderNumber(
-  restaurantId: unknown,
-  branchId: unknown,
-  branchCode: string
-): Promise<string> {
-  const count = await Order.countDocuments({ restaurantId, branchId });
-  const seq = String(count + 1).padStart(4, "0");
-  return `${branchCode}-${seq}`;
-}
-
 export const GET = withAuth(async ({ req, tenant }) => {
   const url = new URL(req.url);
   const status = url.searchParams.get("status");
@@ -43,6 +34,13 @@ export const GET = withAuth(async ({ req, tenant }) => {
   const to = url.searchParams.get("to");
   const approvalStatus = url.searchParams.get("approvalStatus");
   const placedBy = url.searchParams.get("placedBy");
+  const paymentStatus = url.searchParams.get("paymentStatus");
+  const page = Math.max(1, Number(url.searchParams.get("page") || 1));
+  const limit = Math.min(
+    200,
+    Math.max(1, Number(url.searchParams.get("limit") || 50))
+  );
+  const skip = (page - 1) * limit;
 
   const filter: Record<string, unknown> = {
     restaurantId: tenant.restaurantId,
@@ -60,6 +58,7 @@ export const GET = withAuth(async ({ req, tenant }) => {
 
   if (approvalStatus) filter.approvalStatus = approvalStatus;
   if (placedBy) filter.placedBy = placedBy;
+  if (paymentStatus) filter.paymentStatus = paymentStatus;
   if (type) filter.type = type;
   if (from || to) {
     filter.placedAt = {};
@@ -67,12 +66,20 @@ export const GET = withAuth(async ({ req, tenant }) => {
     if (to) (filter.placedAt as Record<string, Date>).$lte = new Date(to);
   }
 
-  const orders = (await Order.find(filter)
-    .sort({ placedAt: -1, createdAt: -1 })
-    .limit(200)
-    .lean()) as unknown as IOrder[];
+  const [orders, total] = await Promise.all([
+    Order.find(filter)
+      .sort({ placedAt: -1, createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean() as unknown as Promise<IOrder[]>,
+    Order.countDocuments(filter),
+  ]);
 
   return json({
+    page,
+    limit,
+    total,
+    hasMore: skip + orders.length < total,
     orders: orders.map((o) => ({
       id: o._id.toString(),
       orderNumber: o.orderNumber,
@@ -83,6 +90,8 @@ export const GET = withAuth(async ({ req, tenant }) => {
       placedBy: o.placedBy ?? "STAFF",
       approvalStatus: o.approvalStatus ?? "NONE",
       status: o.status,
+      paymentStatus: o.paymentStatus ?? "UNPAID",
+      paidAmountPaise: o.paidAmountPaise ?? 0,
       items: o.items.map((it: IOrderItem) => ({
         id: it._id?.toString(),
         menuItemId: it.menuItemId.toString(),
@@ -113,7 +122,11 @@ export const POST = withAuth(async ({ req, tenant }) => {
     const body = CreateOrderSchema.parse(await req.json());
 
     if (body.type === "DINE_IN" && !body.tableId) {
-      return error("Dine-in orders need a table", 400, "Pick a table before sending.");
+      return error(
+        "Dine-in orders need a table",
+        400,
+        "Pick a table before sending."
+      );
     }
 
     const subtotal = body.items.reduce((s, i) => s + i.unitPrice * i.qty, 0);
@@ -121,16 +134,9 @@ export const POST = withAuth(async ({ req, tenant }) => {
     const taxAmount = calcTax(subtotal, discountAmount);
     const total = calcTotal(subtotal, discountAmount, taxAmount);
 
-    // Derive branch code from existing orders or default B1
-    const sample = (await Order.findOne({
-      restaurantId: tenant.restaurantId,
-      branchId: tenant.branchId,
-    })
-      .sort({ createdAt: -1 })
-      .select("orderNumber")
-      .lean()) as { orderNumber?: string } | null;
-    const branchCode = sample?.orderNumber?.split("-")[0] ?? "B1";
-    const orderNumber = await nextOrderNumber(
+    const branchDoc = await Branch.findById(tenant.branchId).select("code");
+    const branchCode = branchDoc?.code || "B1";
+    const orderNumber = await allocateOrderNumber(
       tenant.restaurantId,
       tenant.branchId,
       branchCode
@@ -167,11 +173,10 @@ export const POST = withAuth(async ({ req, tenant }) => {
         });
       }
       if (!session) {
-        const branchDoc = await Branch.findById(tenant.branchId);
         const sessionNumber = await nextSessionNumber(
           table.restaurantId,
           table.branchId,
-          branchDoc?.code ?? branchCode
+          branchCode
         );
         session = await TableSession.create({
           restaurantId: tenant.restaurantId,
@@ -208,6 +213,8 @@ export const POST = withAuth(async ({ req, tenant }) => {
       roundNumber: body.tableId ? roundNumber : 1,
       placedBy: "STAFF",
       status: "PLACED",
+      paymentStatus: "UNPAID",
+      paidAmountPaise: 0,
       items: body.items.map((i) => ({ ...i, status: "QUEUED" })),
       subtotal,
       discountAmount,
@@ -226,6 +233,7 @@ export const POST = withAuth(async ({ req, tenant }) => {
         orderNumber: order.orderNumber,
         total: order.total,
         status: order.status,
+        paymentStatus: order.paymentStatus,
         sessionId,
         roundNumber: order.roundNumber,
       },

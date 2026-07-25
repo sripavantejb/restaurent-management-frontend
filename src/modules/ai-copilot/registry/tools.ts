@@ -329,7 +329,7 @@ export const AI_TOOLS: AiToolDefinition[] = [
       const { Attendance } = await import("@/models/Attendance");
       const { User } = await import("@/models/User");
       const date = new Date().toISOString().slice(0, 10);
-      const [rows, users] = await Promise.all([
+      const [rows, usersRaw] = await Promise.all([
         Attendance.find({
           restaurantId: ctx.restaurantId,
           branchId: ctx.branchId,
@@ -343,6 +343,11 @@ export const AI_TOOLS: AiToolDefinition[] = [
           .select("name role")
           .lean(),
       ]);
+      const users = usersRaw as unknown as {
+        _id: { toString(): string };
+        name: string;
+        role: string;
+      }[];
       const byUser = new Map(rows.map((r) => [r.userId.toString(), r]));
       const list = users.map((u) => {
         const a = byUser.get(u._id.toString());
@@ -385,11 +390,15 @@ export const AI_TOOLS: AiToolDefinition[] = [
         date,
         status: "LATE",
       }).lean();
-      const users = await User.find({
+      const users = (await User.find({
         _id: { $in: late.map((r) => r.userId) },
       })
         .select("name role")
-        .lean();
+        .lean()) as unknown as {
+        _id: { toString(): string };
+        name: string;
+        role: string;
+      }[];
       const umap = new Map(users.map((u) => [u._id.toString(), u]));
       const rows = late.map((r) => {
         const u = umap.get(r.userId.toString());
@@ -429,11 +438,15 @@ export const AI_TOOLS: AiToolDefinition[] = [
         .sort({ fromDate: 1 })
         .limit(50)
         .lean();
-      const users = await User.find({
+      const users = (await User.find({
         _id: { $in: pending.map((r) => r.userId) },
       })
         .select("name role")
-        .lean();
+        .lean()) as unknown as {
+        _id: { toString(): string };
+        name: string;
+        role: string;
+      }[];
       const umap = new Map(users.map((u) => [u._id.toString(), u]));
       const rows = pending.map((r) => {
         const u = umap.get(r.userId.toString());
@@ -475,11 +488,15 @@ export const AI_TOOLS: AiToolDefinition[] = [
         branchId: ctx.branchId,
         period,
       }).lean();
-      const users = await User.find({
+      const users = (await User.find({
         _id: { $in: entries.map((e) => e.userId) },
       })
         .select("name role")
-        .lean();
+        .lean()) as unknown as {
+        _id: { toString(): string };
+        name: string;
+        role: string;
+      }[];
       const umap = new Map(users.map((u) => [u._id.toString(), u]));
       const rows = entries.map((e) => {
         const u = umap.get(e.userId.toString());

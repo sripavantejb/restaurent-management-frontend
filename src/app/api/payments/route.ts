@@ -7,6 +7,7 @@ import { Customer } from "@/models/Customer";
 import { withAuth, json, error } from "@/lib/api";
 import { recomputeSessionTotals } from "@/lib/session";
 import { settlePaidSession } from "@/lib/settle";
+import { syncOrderPaymentState } from "@/lib/order-payment";
 
 const PaymentSchema = z.object({
   orderId: z.string().min(1).optional(),
@@ -125,6 +126,7 @@ export const POST = withAuth(async ({ req, tenant }) => {
         sessionId: session._id,
         orderId: null,
         customerId: body.customerId || null,
+        kind: "CHARGE",
         method: body.method,
         amount: payAmount,
         tenderedAmount: tendered,
@@ -182,14 +184,30 @@ export const POST = withAuth(async ({ req, tenant }) => {
         $match: {
           orderId: order._id,
           restaurantId: tenant.restaurantId,
+          kind: { $ne: "REFUND" },
         },
       },
       { $group: { _id: null, sum: { $sum: "$amount" } } },
     ]);
-    const paidSoFar = alreadyPaid[0]?.sum ?? 0;
+    const refunds = await Payment.aggregate([
+      {
+        $match: {
+          orderId: order._id,
+          restaurantId: tenant.restaurantId,
+          kind: "REFUND",
+        },
+      },
+      { $group: { _id: null, sum: { $sum: "$amount" } } },
+    ]);
+    const paidSoFar = Math.max(
+      0,
+      (alreadyPaid[0]?.sum ?? 0) - (refunds[0]?.sum ?? 0)
+    );
     const due = Math.max(0, order.total - paidSoFar);
     if (due <= 0) {
       order.status = "COMPLETED";
+      order.paymentStatus = "PAID";
+      order.paidAmountPaise = order.total;
       order.completedAt = new Date();
       await order.save();
       return error("Order already fully paid", 400);
@@ -231,6 +249,7 @@ export const POST = withAuth(async ({ req, tenant }) => {
       orderId: order._id,
       sessionId: order.sessionId ?? null,
       customerId: body.customerId || null,
+      kind: "CHARGE",
       method: body.method,
       amount: payAmount,
       tenderedAmount: tendered,
@@ -239,9 +258,13 @@ export const POST = withAuth(async ({ req, tenant }) => {
       paidAt: new Date(),
     });
 
+    await syncOrderPaymentState(order._id);
+
     const remaining = due - payAmount;
     if (remaining <= 0) {
       order.status = "COMPLETED";
+      order.paymentStatus = "PAID";
+      order.paidAmountPaise = order.total;
       order.completedAt = new Date();
       if (!order.servedAt) order.servedAt = new Date();
       await order.save();
@@ -288,6 +311,8 @@ export const POST = withAuth(async ({ req, tenant }) => {
       }
     }
 
+    const fresh = await Order.findById(order._id);
+
     return json(
       {
         id: payment._id.toString(),
@@ -299,6 +324,7 @@ export const POST = withAuth(async ({ req, tenant }) => {
         isPartial,
         remainingDue: Math.max(0, remaining),
         fullyPaid: remaining <= 0,
+        paymentStatus: fresh?.paymentStatus ?? (remaining <= 0 ? "PAID" : "PARTIAL"),
         tableReset: remaining <= 0,
       },
       201

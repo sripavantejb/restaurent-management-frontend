@@ -80,8 +80,8 @@ export const GET = withAuth(async ({ req, tenant }) => {
         else if (status === "ABSENT") absent += 1;
         dayMap[d] = {
           status,
-          checkInAt: a?.checkInAt?.toISOString?.() ?? a?.checkInAt ?? null,
-          checkOutAt: a?.checkOutAt?.toISOString?.() ?? a?.checkOutAt ?? null,
+          checkInAt: a?.checkInAt ? new Date(a.checkInAt).toISOString() : null,
+          checkOutAt: a?.checkOutAt ? new Date(a.checkOutAt).toISOString() : null,
         };
       }
       return {

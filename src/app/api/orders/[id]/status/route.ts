@@ -65,7 +65,18 @@ export const PATCH = withAuth(async ({ req, tenant }) => {
         order.servedAt = new Date();
       }
       if (body.status === "COMPLETED") {
+        if (
+          order.paymentStatus !== "PAID" &&
+          (order.paidAmountPaise || 0) < order.total
+        ) {
+          return error(
+            "Cannot complete unpaid order",
+            400,
+            "Record payment on POS first — completion is saved with payment in the database."
+          );
+        }
         order.completedAt = new Date();
+        order.paymentStatus = "PAID";
         const { deductInventoryForOrder } = await import("@/lib/inventory");
         await deductInventoryForOrder(order);
         if (order.tableId) {

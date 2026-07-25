@@ -5,6 +5,13 @@ import { User } from "@/models/User";
 import { Attendance } from "@/models/Attendance";
 import { withAuth, json, error } from "@/lib/api";
 
+type UserLean = {
+  _id: { toString(): string };
+  name: string;
+  role: string;
+  email?: string;
+};
+
 function yearNow() {
   return new Date().getFullYear();
 }
@@ -42,7 +49,7 @@ export const GET = withAuth(async ({ req, tenant }) => {
     ];
   }
 
-  const [rows, users] = await Promise.all([
+  const [rows, usersRaw] = await Promise.all([
     LeaveRequest.find(filter).sort({ fromDate: -1 }).limit(300).lean(),
     User.find({
       restaurantId: tenant.restaurantId,
@@ -52,6 +59,7 @@ export const GET = withAuth(async ({ req, tenant }) => {
       .select("name role email")
       .lean(),
   ]);
+  const users = usersRaw as unknown as UserLean[];
 
   const umap = new Map(
     users.map((u) => [

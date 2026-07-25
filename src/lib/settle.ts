@@ -24,12 +24,20 @@ export async function settlePaidSession(
       sessionId,
       status: { $nin: ["CANCELLED", "COMPLETED"] },
     },
-    { $set: { status: "COMPLETED", completedAt: new Date() } }
+    {
+      $set: {
+        status: "COMPLETED",
+        completedAt: new Date(),
+        paymentStatus: "PAID",
+      },
+    }
   );
 
   for (const o of toComplete) {
     o.status = "COMPLETED";
     o.completedAt = new Date();
+    o.paymentStatus = "PAID";
+    o.paidAmountPaise = o.total;
     await deductInventoryForOrder(o);
   }
 

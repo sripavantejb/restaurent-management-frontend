@@ -9,6 +9,7 @@ const PUBLIC_EXACT = [
   "/login",
   "/api/auth/login",
   "/api/auth/me",
+  "/api/health",
   "/admin/login",
   "/api/platform/auth/login",
   "/api/platform/auth/me",
@@ -18,9 +19,16 @@ const PUBLIC_EXACT = [
 const PUBLIC_PREFIX = ["/q/", "/t/", "/api/guest/", "/guest/"];
 
 function secret() {
-  return new TextEncoder().encode(
-    process.env.JWT_SECRET || "restaurantos-dev-secret-change-in-production"
-  );
+  const value = process.env.JWT_SECRET;
+  if (!value) {
+    if (process.env.NODE_ENV === "production") {
+      return null;
+    }
+    return new TextEncoder().encode(
+      "restaurantos-dev-secret-change-in-production"
+    );
+  }
+  return new TextEncoder().encode(value);
 }
 
 function isPublic(pathname: string) {
@@ -36,6 +44,7 @@ function isPlatformPath(pathname: string) {
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const jwtSecret = secret();
 
   if (
     pathname.startsWith("/_next") ||
@@ -45,13 +54,26 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // Fail closed in production if JWT is not configured (except health).
+  if (!jwtSecret && pathname !== "/api/health") {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json(
+        { error: "Server misconfigured", hint: "Set JWT_SECRET" },
+        { status: 503 }
+      );
+    }
+    return new NextResponse("Server misconfigured: JWT_SECRET required", {
+      status: 503,
+    });
+  }
+
   if (isPublic(pathname)) {
     // Logged-in platform admin visiting login → console
-    if (pathname === "/admin/login") {
+    if (pathname === "/admin/login" && jwtSecret) {
       const platformToken = req.cookies.get(PLATFORM_COOKIE)?.value;
       if (platformToken) {
         try {
-          const { payload } = await jwtVerify(platformToken, secret());
+          const { payload } = await jwtVerify(platformToken, jwtSecret);
           if (payload.kind === "platform") {
             const url = req.nextUrl.clone();
             url.pathname = "/admin";
@@ -64,11 +86,11 @@ export async function middleware(req: NextRequest) {
     }
 
     // Logged-in staff visiting /login → home
-    if (pathname === "/login") {
+    if (pathname === "/login" && jwtSecret) {
       const staffToken = req.cookies.get(STAFF_COOKIE)?.value;
       if (staffToken) {
         try {
-          const { payload } = await jwtVerify(staffToken, secret());
+          const { payload } = await jwtVerify(staffToken, jwtSecret);
           const role = String(payload.role || "OWNER");
           const url = req.nextUrl.clone();
           url.pathname =
@@ -101,7 +123,7 @@ export async function middleware(req: NextRequest) {
       return NextResponse.redirect(url);
     }
     try {
-      const { payload } = await jwtVerify(token, secret());
+      const { payload } = await jwtVerify(token, jwtSecret!);
       if (payload.kind !== "platform") throw new Error("not platform");
     } catch {
       const url = req.nextUrl.clone();
@@ -127,7 +149,7 @@ export async function middleware(req: NextRequest) {
 
   let role = "OWNER";
   try {
-    const { payload } = await jwtVerify(token, secret());
+    const { payload } = await jwtVerify(token, jwtSecret!);
     role = String(payload.role || "OWNER");
   } catch {
     const url = req.nextUrl.clone();
